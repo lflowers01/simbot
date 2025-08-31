@@ -30,7 +30,7 @@ import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 import edu.wpi.first.wpilibj2.command.SubsystemBase;
 import frc.robot.Constants.constElevator;
 
-public class Elevator extends SubsystemBase{
+public class ElevatorOLD extends SubsystemBase{
 
     TalonFX leadMotor, followMotor;
     
@@ -52,7 +52,7 @@ public class Elevator extends SubsystemBase{
 
     ElevatorSim elevatorSim;
 
-    public Elevator(double elevatorMinimumLength) {
+    public ElevatorOLD(double elevatorMinimumLength) {
 
         leadMotor = new TalonFX(constElevator.LEAD_MOTOR_ID);
         followMotor = new TalonFX(constElevator.FOLLOW_MOTOR_ID);
@@ -85,7 +85,9 @@ public class Elevator extends SubsystemBase{
         elevatorControl = new MotionMagicVoltage(0);
         
         // Simulation setup, Mechanism2d
-
+        elevatorSim.setState(constElevator.minElevatorHeightMeters, 0); // start at bottom, stopped
+        leadMotorSimState.setRawRotorPosition(0);
+        leadMotorSimState.setRotorVelocity(0);
         elevatorBase = new Mechanism2d(3, 3);
         elevatorRoot = elevatorBase.getRoot("elevatorRoot", 2, 0);
         elevatorDraw = elevatorRoot.append(new MechanismLigament2d("elevator", 2, 90));
@@ -119,7 +121,7 @@ public class Elevator extends SubsystemBase{
     }
 
     public void setElevatorHeight(double height) { // IN METERS
-        elevatorSim.setState(height, 0);
+        //elevatorSim.setState(height, 0);
         leadMotor.setControl(elevatorControl.withPosition(height * constElevator.ROTATIONS_PER_METER));
         elevatorTarget = height;
     }

@@ -12,6 +12,7 @@ import com.ctre.phoenix6.swerve.SwerveRequest;
 import edu.wpi.first.math.geometry.Rotation2d;
 import edu.wpi.first.units.AngleUnit;
 import edu.wpi.first.units.measure.Angle;
+import edu.wpi.first.wpilibj.RobotBase;
 import edu.wpi.first.wpilibj2.command.Command;
 import edu.wpi.first.wpilibj2.command.InstantCommand;
 import edu.wpi.first.wpilibj2.command.RunCommand;
@@ -21,7 +22,9 @@ import edu.wpi.first.wpilibj2.command.sysid.SysIdRoutine.Direction;
 import frc.robot.Constants.constElevator;
 import frc.robot.generated.TunerConstants;
 import frc.robot.subsystems.Drive;
-import frc.robot.subsystems.Elevator;
+import frc.robot.subsystems.elevator.Elevator;
+import frc.robot.subsystems.elevator.ElevatorIOReal;
+import frc.robot.subsystems.elevator.ElevatorIOSim;
 
 public class RobotContainer {
 
@@ -46,7 +49,7 @@ public class RobotContainer {
         private final CommandXboxController joystick = new CommandXboxController(0);
 
         public final Drive drivetrain = TunerConstants.createDrivetrain();
-        public final Elevator elevator = new Elevator(constElevator.IDLE_HEIGHT);
+       
 
         public RobotContainer() {
 
@@ -103,12 +106,32 @@ public class RobotContainer {
                 // reset the field-centric heading on left bumper press
                 joystick.leftBumper().onTrue(drivetrain.runOnce(() -> drivetrain.seedFieldCentric()));
 
-                joystick.x().onTrue(new InstantCommand(() -> {
-                elevator.setElevatorHeight(constElevator.L1);
-                      }));
+                Elevator elevator;
 
-                joystick.b().onTrue(new InstantCommand(() -> {
-                        elevator.setElevatorHeight(constElevator.L4);
+                if (RobotBase.isReal()) {
+                        System.out.println("Running Elevator in Real Mode");
+                        elevator = new Elevator(new ElevatorIOReal());
+                
+                } else {
+                        System.out.println("Running Elevator in Sim Mode");
+                        elevator = new Elevator(new ElevatorIOSim());
+                }
+
+                joystick.x().onTrue(new InstantCommand(() -> {
+                        elevator.setHeight(constElevator.IDLE);
+                }));
+
+                joystick.pov(180).onTrue(new InstantCommand(() -> {
+                        elevator.setHeight(constElevator.L1);
+                }));
+                joystick.pov(270).onTrue(new InstantCommand(() -> {
+                        elevator.setHeight(constElevator.L2);
+                }));
+                joystick.pov(0).onTrue(new InstantCommand(() -> {
+                        elevator.setHeight(constElevator.L3);
+                }));
+                joystick.pov(90).onTrue(new InstantCommand(() -> {
+                        elevator.setHeight(constElevator.L4);
                 }));
 
 
