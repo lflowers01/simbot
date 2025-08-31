@@ -3,6 +3,7 @@ package frc.robot.subsystems.elevator;
 import com.ctre.phoenix6.configs.MotionMagicConfigs;
 import com.ctre.phoenix6.configs.TalonFXConfiguration;
 import com.ctre.phoenix6.controls.MotionMagicExpoVoltage;
+import com.ctre.phoenix6.controls.MotionMagicVoltage;
 import com.ctre.phoenix6.hardware.TalonFX;
 import com.ctre.phoenix6.sim.TalonFXSimState;
 import edu.wpi.first.math.system.plant.DCMotor;
@@ -24,7 +25,7 @@ public class ElevatorIOSim implements ElevatorIO {
     private final MechanismRoot2d root;
     private final MechanismLigament2d carriage;
     final TalonFXConfiguration leadConfig;
-    final MotionMagicExpoVoltage control;
+    final MotionMagicVoltage control;
     private double targetMeters;
 
     public ElevatorIOSim() {
@@ -63,7 +64,7 @@ public class ElevatorIOSim implements ElevatorIO {
         simState.setRotorVelocity(0);
 
         // Initialize Motion Magic voltage AFTER rotor is synced
-        control = new MotionMagicExpoVoltage(elevatorSim.getPositionMeters() * constElevator.ROTATIONS_PER_METER).withFeedForward(constElevator.KG);
+        control = new MotionMagicVoltage(elevatorSim.getPositionMeters() * constElevator.ROTATIONS_PER_METER);//.withFeedForward(constElevator.KG);
 
         MotionMagicConfigs elevatorMotion = leadConfig.MotionMagic;
         elevatorMotion.MotionMagicCruiseVelocity = constElevator.motionVelocity * constElevator.ROTATIONS_PER_METER;
@@ -91,8 +92,8 @@ public class ElevatorIOSim implements ElevatorIO {
         // Fill inputs
         inputs.positionMeters = elevatorSim.getPositionMeters();
         inputs.velocityMetersPerSec = elevatorSim.getVelocityMetersPerSecond();
-        inputs.appliedVolts = simState.getMotorVoltage();
-        inputs.currentAmps = elevatorSim.getCurrentDrawAmps();
+        inputs.appliedVolts = leadMotor.getSupplyVoltage().getValueAsDouble();
+        inputs.currentAmps = leadMotor.getSupplyCurrent().getValueAsDouble();
         inputs.targetMeters = targetMeters;
 
         // Update Mechanism2d visualization
