@@ -59,7 +59,7 @@ public class Constants {
         public static double minHeightMeters = Units.inchesToMeters(39.25);
         public static double maxHeightMeters = Units.inchesToMeters(93.75);
         public static double verticalOffset = Units.inchesToMeters(1.75); // Ground to bottom of elevator
-        public static double horizontalOffset = Units.inchesToMeters(8.25); // Center of robot to elevator
+        public static double horizontalOffset = Units.inchesToMeters(11.00); // Center of robot to elevator
         public static Color8Bit color = new Color8Bit(255, 0, 0);
         public static double lineWidth = 5;
         public static double ROTATIONS_PER_METER = gearing / (2 * Math.PI * drumRadius);
