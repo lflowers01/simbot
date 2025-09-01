@@ -2,28 +2,34 @@ package frc.robot.subsystems.elevator;
 
 import org.littletonrobotics.junction.Logger;
 import edu.wpi.first.wpilibj2.command.SubsystemBase;
-import frc.robot.Constants.constElevator;
 
 public class Elevator extends SubsystemBase {
-  private final ElevatorIO io;
-  private final ElevatorIOInputsAutoLogged inputs = new ElevatorIOInputsAutoLogged();
+    private final ElevatorIO io;
+    private final ElevatorIOInputsAutoLogged inputs = new ElevatorIOInputsAutoLogged();
 
-  public Elevator(ElevatorIO io) {
-    this.io = io;
-    System.out.println("Elevator constructed with IO: " + io.getClass().getSimpleName());
-    System.out.println("Elevator rotations per meter:" + constElevator.ROTATIONS_PER_METER);
-  }
+    public Elevator(ElevatorIO io) {
+        this.io = io;
+    }
 
-  @Override
-  public void periodic() {
-    // System.out.println("Elevator periodic");
-    io.updateInputs(inputs);
-    Logger.processInputs("Elevator", inputs);
-  }
+    @Override
+    public void periodic() {
+        io.updateInputs(inputs);
+        Logger.processInputs("Elevator", inputs);
+    }
 
-  public void setHeight(double meters) {
-    io.setHeight(meters);
-  }
+    public void setHeight(double meters) {
+        io.setHeight(meters);
+    }
 
-  
+    public double getHeight() {
+        return inputs.positionMeters;
+    }
+
+    public double getVelocity() {
+        return inputs.velocityMetersPerSec;
+    }
+
+    public boolean atTarget() {
+        return Math.abs(inputs.positionMeters - inputs.targetMeters) < 0.02;
+    }
 }

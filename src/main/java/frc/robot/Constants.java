@@ -33,6 +33,9 @@ public class Constants {
         public static double L3 = 1.975;
         public static double L4 = 2.3;
 
+
+        // Simulated elevator parameters
+        public static double simulationTick = 0.02; // Update every 20 ms
         public static double elevatorGearing = 6; // 8:48 reduction
         public static double carriageMass =  Units.lbsToKilograms(6.081);
         public static double elevatorDrumRadius = Units.inchesToMeters(1.538/2); // 1.538 inches diameter
