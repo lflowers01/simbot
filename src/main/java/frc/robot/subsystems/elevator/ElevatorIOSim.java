@@ -17,22 +17,26 @@ public class ElevatorIOSim extends ElevatorIO.TalonFXBase {
 
     public ElevatorIOSim() {
         super();
-        
-        simState = leadMotor.getSimState();
-        
-        elevatorSim = new ElevatorSim(
-            DCMotor.getKrakenX60(2),
-            constElevator.elevatorGearing,
-            constElevator.carriageMass,
-            constElevator.elevatorDrumRadius,
-            constElevator.minElevatorHeightMeters,
-            constElevator.maxElevatorHeightMeters,
-            true,
-            constElevator.minElevatorHeightMeters);
 
-        Mechanism2d mech2d = new Mechanism2d(3, 3);
-        MechanismRoot2d root = mech2d.getRoot("ElevatorRoot", 2, 0);
-        carriage = root.append(new MechanismLigament2d("Carriage", constElevator.minElevatorHeightMeters, 90));
+        simState = leadMotor.getSimState();
+
+        // Create the elevator simulation
+        elevatorSim = new ElevatorSim(
+                DCMotor.getKrakenX60(2), // 2 Kraken X60 motors
+                constElevator.gearing,
+                constElevator.carriageMass,
+                constElevator.drumRadius,
+                constElevator.minHeightMeters,
+                constElevator.maxHeightMeters,
+                true, // Simulate gravity
+                constElevator.minHeightMeters);
+
+        Mechanism2d mech2d = new Mechanism2d(1, constElevator.maxHeightMeters + 0.2);
+        MechanismRoot2d root = mech2d.getRoot("ElevatorRoot", constElevator.horizontalOffset,
+                constElevator.verticalOffset);
+        carriage = root.append(new MechanismLigament2d("Carriage", constElevator.minHeightMeters, 90,
+                constElevator.lineWidth,
+                constElevator.color));
         SmartDashboard.putData("ElevatorSim", mech2d);
 
         simState.setRawRotorPosition(elevatorSim.getPositionMeters() * constElevator.ROTATIONS_PER_METER);
@@ -60,5 +64,11 @@ public class ElevatorIOSim extends ElevatorIO.TalonFXBase {
     protected void updateInterfaceInputs(ElevatorIOInputs inputs) {
         inputs.positionMeters = elevatorSim.getPositionMeters();
         inputs.velocityMetersPerSec = elevatorSim.getVelocityMetersPerSecond();
+    }
+
+    @Override
+    public void setHeight(double meters) {
+        super.setHeight(meters);
+        elevatorSim.setInput(leadMotor.getMotorVoltage().getValueAsDouble());
     }
 }

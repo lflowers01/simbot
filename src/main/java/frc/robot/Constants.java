@@ -1,10 +1,28 @@
 package frc.robot;
 
 import edu.wpi.first.math.util.Units;
+import edu.wpi.first.wpilibj.util.Color8Bit;
 
 public class Constants {
-    class constDrivetrain {
+    public class constDrivetrain {
+        public static final int JOYSTICK_PORT = 0;
+        public static final double MAX_ANGULAR_RATE = 0.75;
+        public static final double DEADBAND_PERCENT = 0.1;
 
+        // Advanced Drive Control Constants
+        public static final double DEADBAND = 0.1;
+        public static final double HALF_SPEED_FACTOR = 0.35;
+        public static final double ROTATION_ACTIVE_TIMEOUT = 0.1; // seconds
+        public static final double ROTATION_ACTIVE_THRESHOLD_DEGREES = 5.0; // degrees
+        public static final double INPUT_CURVE = 3.0; // Input exponent (1.0 = linear, 2.0 = squared, etc.)
+
+        // Speed Control Constants
+        public static final double MAX_SPEED = 4.5; // Maximum robot speed in m/s
+        public static final double SPEED_MODIFIER = 1.0; // Speed modifier (0.0 to 1.0)
+
+        // Demensions
+        public static final double CHASSIS_WIDTH = Units.inchesToMeters(29.5);
+        public static final double CHASSIS_LENGTH = Units.inchesToMeters(29.5);
     }
 
     public class constElevator {
@@ -33,16 +51,18 @@ public class Constants {
         public static double L3 = 1.975;
         public static double L4 = 2.3;
 
-
-        // Simulated elevator parameters
+        // Simulated parameters
         public static double simulationTick = 0.02; // Update every 20 ms
-        public static double elevatorGearing = 6; // 8:48 reduction
-        public static double carriageMass =  Units.lbsToKilograms(6.081);
-        public static double elevatorDrumRadius = Units.inchesToMeters(1.538/2); // 1.538 inches diameter
-        public static double minElevatorHeightMeters = Units.inchesToMeters(39.25);
-        public static double maxElevatorHeightMeters = Units.inchesToMeters(93.75);
-
-        public static double ROTATIONS_PER_METER = elevatorGearing / (2 * Math.PI * elevatorDrumRadius);
+        public static double gearing = 6; // 8:48 reduction
+        public static double carriageMass = Units.lbsToKilograms(6.081);
+        public static double drumRadius = Units.inchesToMeters(1.538 / 2); // 1.538 inches diameter
+        public static double minHeightMeters = Units.inchesToMeters(39.25);
+        public static double maxHeightMeters = Units.inchesToMeters(93.75);
+        public static double verticalOffset = Units.inchesToMeters(1.75); // Ground to bottom of elevator
+        public static double horizontalOffset = Units.inchesToMeters(8.25); // Center of robot to elevator
+        public static Color8Bit color = new Color8Bit(255, 0, 0);
+        public static double lineWidth = 5;
+        public static double ROTATIONS_PER_METER = gearing / (2 * Math.PI * drumRadius);
     }
 
 }

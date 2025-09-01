@@ -14,14 +14,18 @@ public interface ElevatorIO {
     public static class ElevatorIOInputs {
         public double positionMeters = 0.0;
         public double velocityMetersPerSec = 0.0;
-        public double appliedVolts = 0.0;
-        public double currentAmps = 0.0;
+        public double leadAppliedVolts = 0.0;
+        public double leadCurrentAmps = 0.0;
+        public double followerAppliedVolts = 0.0;
+        public double followerCurrentAmps = 0.0;
         public double targetMeters = 0.0;
     }
 
-    public default void updateInputs(ElevatorIOInputs inputs) {}
+    public default void updateInputs(ElevatorIOInputs inputs) {
+    }
 
-    public default void setHeight(double meters) {}
+    public default void setHeight(double meters) {
+    }
 
     public abstract class TalonFXBase implements ElevatorIO {
         protected final TalonFX leadMotor;
@@ -35,7 +39,7 @@ public interface ElevatorIO {
             control = new MotionMagicVoltage(0);
 
             TalonFXConfiguration config = new TalonFXConfiguration();
-            
+
             config.Slot0.kG = constElevator.KG;
             config.Slot0.kS = constElevator.KS;
             config.Slot0.kV = constElevator.KV;
@@ -49,13 +53,13 @@ public interface ElevatorIO {
             motionMagic.MotionMagicAcceleration = constElevator.motionAcceleration * constElevator.ROTATIONS_PER_METER;
             motionMagic.MotionMagicExpo_kA = constElevator.EXPO_KA;
             motionMagic.MotionMagicExpo_kV = constElevator.EXPO_KV;
-            
+
             SoftwareLimitSwitchConfigs softLimits = config.SoftwareLimitSwitch;
             softLimits.ForwardSoftLimitEnable = true;
             softLimits.ReverseSoftLimitEnable = true;
-            softLimits.ForwardSoftLimitThreshold = constElevator.maxElevatorHeightMeters * constElevator.ROTATIONS_PER_METER;
-            softLimits.ReverseSoftLimitThreshold = constElevator.minElevatorHeightMeters * constElevator.ROTATIONS_PER_METER;
-            
+            softLimits.ForwardSoftLimitThreshold = constElevator.maxHeightMeters * constElevator.ROTATIONS_PER_METER;
+            softLimits.ReverseSoftLimitThreshold = constElevator.minHeightMeters * constElevator.ROTATIONS_PER_METER;
+
             leadMotor.getConfigurator().apply(config);
             followerMotor.setControl(new Follower(constElevator.LEAD_MOTOR_ID, true));
         }
@@ -68,10 +72,12 @@ public interface ElevatorIO {
 
         @Override
         public void updateInputs(ElevatorIOInputs inputs) {
-            inputs.appliedVolts = leadMotor.getMotorVoltage().getValueAsDouble();
-            inputs.currentAmps = leadMotor.getSupplyCurrent().getValueAsDouble();
+            inputs.leadAppliedVolts = leadMotor.getMotorVoltage().getValueAsDouble();
+            inputs.leadCurrentAmps = leadMotor.getSupplyCurrent().getValueAsDouble();
+            inputs.followerAppliedVolts = followerMotor.getMotorVoltage().getValueAsDouble();
+            inputs.followerCurrentAmps = followerMotor.getSupplyCurrent().getValueAsDouble();
             inputs.targetMeters = targetMeters;
-            
+
             updateInterfaceInputs(inputs);
         }
 

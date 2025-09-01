@@ -10,77 +10,71 @@ import com.ctre.phoenix6.swerve.SwerveModule.DriveRequestType;
 import com.ctre.phoenix6.swerve.SwerveRequest;
 
 import edu.wpi.first.math.geometry.Rotation2d;
-
 import edu.wpi.first.wpilibj.RobotBase;
 import edu.wpi.first.wpilibj2.command.InstantCommand;
 import edu.wpi.first.wpilibj2.command.button.CommandXboxController;
 import edu.wpi.first.wpilibj2.command.button.RobotModeTriggers;
+
+import frc.robot.Constants.constDrivetrain;
 import frc.robot.Constants.constElevator;
+import frc.robot.commands.DriveCommand;
 import frc.robot.generated.TunerConstants;
-import frc.robot.subsystems.Drive;
+import frc.robot.subsystems.drive.Drive;
 import frc.robot.subsystems.elevator.Elevator;
 import frc.robot.subsystems.elevator.ElevatorIOReal;
 import frc.robot.subsystems.elevator.ElevatorIOSim;
 
 public class RobotContainer {
 
-        private double MaxSpeed = TunerConstants.kSpeedAt12Volts.in(MetersPerSecond); // kSpeedAt12Volts desired top
-                                                                                      // speed
-        private double MaxAngularRate = RotationsPerSecond.of(0.75).in(RadiansPerSecond); // 3/4 of a rotation per
-                                                                                          // second
-                                                                                          // max angular velocity
+        private final double maxSpeed = constDrivetrain.MAX_SPEED * constDrivetrain.SPEED_MODIFIER;
+        private final double maxAngularRate = RotationsPerSecond.of(constDrivetrain.MAX_ANGULAR_RATE)
+                        .in(RadiansPerSecond);
 
-        /* Setting up bindings for necessary control of the swerve drive platform */
         private final SwerveRequest.FieldCentric drive = new SwerveRequest.FieldCentric()
-                        .withDeadband(MaxSpeed * 0.1).withRotationalDeadband(MaxAngularRate * 0.1) // Add a 10% deadband
-                        .withDriveRequestType(DriveRequestType.OpenLoopVoltage); // Use open-loop control for drive
-                                                                                 // motors
+                        .withDeadband(maxSpeed * constDrivetrain.DEADBAND_PERCENT)
+                        .withRotationalDeadband(maxAngularRate * constDrivetrain.DEADBAND_PERCENT)
+                        .withDriveRequestType(DriveRequestType.OpenLoopVoltage);
+
         private final SwerveRequest.SwerveDriveBrake brake = new SwerveRequest.SwerveDriveBrake();
         private final SwerveRequest.PointWheelsAt point = new SwerveRequest.PointWheelsAt();
         private final SwerveRequest.RobotCentric forwardStraight = new SwerveRequest.RobotCentric()
                         .withDriveRequestType(DriveRequestType.OpenLoopVoltage);
+        private final SwerveRequest.Idle idle = new SwerveRequest.Idle();
 
-        private final Telemetry logger = new Telemetry(MaxSpeed);
-
-        private final CommandXboxController joystick = new CommandXboxController(0);
+        private final Telemetry logger = new Telemetry(maxSpeed);
+        private final CommandXboxController joystick = new CommandXboxController(constDrivetrain.JOYSTICK_PORT);
 
         public final Drive drivetrain = TunerConstants.createDrivetrain();
-       
+        private final Elevator elevator;
 
         public RobotContainer() {
+                if (RobotBase.isReal()) {
+                        System.out.println("Running Elevator in Real Mode");
+                        elevator = new Elevator(new ElevatorIOReal());
+                } else {
+                        System.out.println("Running Elevator in Sim Mode");
+                        elevator = new Elevator(new ElevatorIOSim());
+                }
 
                 configureBindings();
-
         }
 
         private void configureBindings() {
-
-                // Note that X is defined as forward according to WPILib convention,
-                // and Y is defined as to the left according to WPILib convention.
                 drivetrain.setDefaultCommand(
-                                // Drivetrain will execute this command periodically
-                                drivetrain.applyRequest(() -> drive.withVelocityX(-joystick.getLeftY() * MaxSpeed) // Drive
-                                                                                                                   // forward
-                                                                                                                   // with
-                                                                                                                   // negative
-                                                                                                                   // Y
-                                                                                                                   // (forward)
-                                                .withVelocityY(-joystick.getLeftX() * MaxSpeed) // Drive left with
-                                                                                                // negative X (left)
-                                                .withRotationalRate(-joystick.getRightX() * MaxAngularRate) // Drive
-                                                                                                            // counterclockwise
-                                                                                                            // with
-                                                                                                            // negative
-                                                                                                            // X (left)
-                                ));
+                                new DriveCommand(
+                                                drivetrain,
+                                                () -> -joystick.getLeftY(),
+                                                () -> -joystick.getLeftX(),
+                                                () -> -joystick.getRightX(),
+                                                joystick.rightBumper(), // Use rightBumper() directly as BooleanSupplier
+                                                maxSpeed,
+                                                maxAngularRate));
 
-                // Idle while the robot is disabled. This ensures the configured
-                // neutral mode is applied to the drive motors while disabled.
-                final var idle = new SwerveRequest.Idle();
                 RobotModeTriggers.disabled().whileTrue(
                                 drivetrain.applyRequest(() -> idle).ignoringDisable(true));
 
                 joystick.a().whileTrue(drivetrain.applyRequest(() -> brake));
+
                 joystick.b().whileTrue(drivetrain.applyRequest(
                                 () -> point.withModuleDirection(
                                                 new Rotation2d(-joystick.getLeftY(), -joystick.getLeftX()))));
@@ -99,41 +93,15 @@ public class RobotContainer {
                 // joystick.start().and(joystick.y()).whileTrue(drivetrain.sysIdQuasistatic(Direction.kForward));
                 // joystick.start().and(joystick.x()).whileTrue(drivetrain.sysIdQuasistatic(Direction.kReverse));
 
-                // reset the field-centric heading on left bumper press
                 joystick.leftBumper().onTrue(drivetrain.runOnce(() -> drivetrain.seedFieldCentric()));
 
-                Elevator elevator;
+                joystick.x().onTrue(new InstantCommand(() -> elevator.setHeight(constElevator.IDLE)));
 
-                if (RobotBase.isReal()) {
-                        System.out.println("Running Elevator in Real Mode");
-                        elevator = new Elevator(new ElevatorIOReal());
-                
-                } else {
-                        System.out.println("Running Elevator in Sim Mode");
-                        elevator = new Elevator(new ElevatorIOSim());
-                }
-
-                joystick.x().onTrue(new InstantCommand(() -> {
-                        elevator.setHeight(constElevator.IDLE);
-                }));
-
-                joystick.pov(180).onTrue(new InstantCommand(() -> {
-                        elevator.setHeight(constElevator.L1);
-                }));
-                joystick.pov(270).onTrue(new InstantCommand(() -> {
-                        elevator.setHeight(constElevator.L2);
-                }));
-                joystick.pov(0).onTrue(new InstantCommand(() -> {
-                        elevator.setHeight(constElevator.L3);
-                }));
-                joystick.pov(90).onTrue(new InstantCommand(() -> {
-                        elevator.setHeight(constElevator.L4);
-                }));
-
-
-
+                joystick.pov(180).onTrue(new InstantCommand(() -> elevator.setHeight(constElevator.L1)));
+                joystick.pov(270).onTrue(new InstantCommand(() -> elevator.setHeight(constElevator.L2)));
+                joystick.pov(0).onTrue(new InstantCommand(() -> elevator.setHeight(constElevator.L3)));
+                joystick.pov(90).onTrue(new InstantCommand(() -> elevator.setHeight(constElevator.L4)));
 
                 drivetrain.registerTelemetry(logger::telemeterize);
         }
-
 }
