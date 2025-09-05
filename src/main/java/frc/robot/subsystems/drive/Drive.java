@@ -364,4 +364,13 @@ public class Drive extends TunerSwerveDrivetrain implements Subsystem {
         super.addVisionMeasurement(visionRobotPoseMeters, Utils.fpgaToCurrentTime(timestampSeconds),
                 visionMeasurementStdDevs);
     }
+
+    /**
+     * Gets the current robot pose from the drivetrain state.
+     *
+     * @return The current robot pose
+     */
+    public Pose2d getPose() {
+        return getState().Pose;
+    }
 }

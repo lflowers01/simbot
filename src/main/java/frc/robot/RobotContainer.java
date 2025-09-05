@@ -1,6 +1,6 @@
 // Copyright (c) FIRST and other WPILib contributors.
-// Open Source Software; you can modify and/or share it under the terms of
-// the WPILib BSD license file in the root directory of this project.
+// Open Source Software; you can modify and/or share it under the terms of the
+// WPILib BSD license file in the root directory of this project.
 
 package frc.robot;
 
@@ -23,6 +23,7 @@ import frc.robot.subsystems.drive.Drive;
 import frc.robot.subsystems.elevator.Elevator;
 import frc.robot.subsystems.elevator.ElevatorIOReal;
 import frc.robot.subsystems.elevator.ElevatorIOSim;
+import frc.robot.subsystems.vision.Vision;
 
 public class RobotContainer {
 
@@ -46,6 +47,7 @@ public class RobotContainer {
 
         public final Drive drivetrain = TunerConstants.createDrivetrain();
         private final Elevator elevator;
+        public Vision vision;
 
         public RobotContainer() {
                 if (RobotBase.isReal()) {
@@ -55,7 +57,7 @@ public class RobotContainer {
                         System.out.println("Running Elevator in Sim Mode");
                         elevator = new Elevator(new ElevatorIOSim());
                 }
-
+                vision = new Vision(drivetrain::addVisionMeasurement);
                 configureBindings();
         }
 
@@ -102,6 +104,15 @@ public class RobotContainer {
                 joystick.pov(0).onTrue(new InstantCommand(() -> elevator.setHeight(constElevator.L3)));
                 joystick.pov(90).onTrue(new InstantCommand(() -> elevator.setHeight(constElevator.L4)));
 
+                // VISION - Remove the manual periodic call
+                // vision.periodic(); // Remove this line
+
                 drivetrain.registerTelemetry(logger::telemeterize);
+        }
+
+        public void simulationPeriodic() {
+                if (vision != null) {
+                        vision.simulationPeriodic(drivetrain.getPose());
+                }
         }
 }
