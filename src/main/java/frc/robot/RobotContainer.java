@@ -27,6 +27,7 @@ import frc.robot.subsystems.elevator.ElevatorIOSim;
 import frc.robot.subsystems.vision.Vision;
 import frc.robot.subsystems.vision.VisionIOPhotonVision;
 import frc.robot.subsystems.vision.VisionIOPhotonVisionSim;
+import frc.robot.commands.AutoAlignCommand;
 
 public class RobotContainer {
 
@@ -120,6 +121,16 @@ public class RobotContainer {
                 joystick.pov(270).onTrue(new InstantCommand(() -> elevator.setHeight(constElevator.l2)));
                 joystick.pov(0).onTrue(new InstantCommand(() -> elevator.setHeight(constElevator.l3)));
                 joystick.pov(90).onTrue(new InstantCommand(() -> elevator.setHeight(constElevator.l4)));
+
+                // Auto-align to best AprilTag when Y button is pressed
+                joystick.y().onTrue(new InstantCommand(() -> {
+                        var bestTagPose = vision.getBestTagPose();
+                        if (bestTagPose != null) {
+                                new AutoAlignCommand(drivetrain, bestTagPose).schedule();
+                        } else {
+                                System.out.println("No valid AprilTag found for auto-alignment");
+                        }
+                }));
 
                 // VISION - Remove the manual periodic call
                 // vision.periodic(); // Remove this line

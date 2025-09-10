@@ -22,6 +22,7 @@ import edu.wpi.first.math.numbers.N1;
 import edu.wpi.first.math.numbers.N3;
 import edu.wpi.first.wpilibj.Alert;
 import edu.wpi.first.wpilibj.Alert.AlertType;
+import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 import edu.wpi.first.wpilibj2.command.SubsystemBase;
 import frc.robot.Constants.constVision;
 import frc.robot.subsystems.vision.VisionIO.PoseObservationType;
@@ -61,6 +62,50 @@ public class Vision extends SubsystemBase {
      */
     public Rotation2d getTargetX(int cameraIndex) {
         return inputs[cameraIndex].latestTargetObservation.tx();
+    }
+
+    /**
+     * Returns the best tag pose from all cameras based on distance and ambiguity.
+     * 
+     * @return The best tag pose, or null if no valid tags are found
+     */
+    public Pose3d getBestTagPose() {
+        Pose3d bestTagPose = null;
+        double bestScore = Double.POSITIVE_INFINITY;
+
+        // Loop through all cameras
+        for (int cameraIndex = 0; cameraIndex < inputs.length; cameraIndex++) {
+            if (!inputs[cameraIndex].connected) {
+                continue;
+            }
+
+            // Loop through pose observations for this camera
+            for (var observation : inputs[cameraIndex].poseObservations) {
+                // Skip if no tags or invalid observation
+                if (observation.tagCount() == 0
+                        || observation.ambiguity() > constVision.maxAmbiguity
+                        || Math.abs(observation.pose().getZ()) > constVision.maxZError) {
+                    continue;
+                }
+
+                // Calculate score based on distance and ambiguity (lower is better)
+                double score = observation.averageTagDistance() + (observation.ambiguity() * 2.0);
+
+                // Update best if this is better
+                if (score < bestScore) {
+                    bestScore = score;
+                    // Get the tag pose from the AprilTag layout
+                    if (inputs[cameraIndex].tagIds.length > 0) {
+                        var tagPose = constVision.aprilTagLayout.getTagPose(inputs[cameraIndex].tagIds[0]);
+                        if (tagPose.isPresent()) {
+                            bestTagPose = tagPose.get();
+                        }
+                    }
+                }
+            }
+        }
+
+        return bestTagPose;
     }
 
     @Override
@@ -173,6 +218,7 @@ public class Vision extends SubsystemBase {
         Logger.recordOutput(
                 "Vision/Summary/RobotPosesRejected",
                 allRobotPosesRejected.toArray(new Pose3d[allRobotPosesRejected.size()]));
+
     }
 
     @FunctionalInterface

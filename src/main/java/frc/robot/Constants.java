@@ -91,10 +91,19 @@ public class Constants {
         public static final String camera1Name = "camera_1";
 
         // Robot to camera transforms
-        public static final Transform3d robotToCamera0 = new Transform3d(0.2, 0.0, 0.2,
-                new Rotation3d(0.0, -0.4, 0.0));
-        public static final Transform3d robotToCamera1 = new Transform3d(-0.2, 0.0, 0.2,
-                new Rotation3d(0.0, -0.4, Math.PI));
+        // Left camera transform
+        // pitch -20, yaw 45, roll 0
+        // x 310.920mm, y -293.896mm, z 247.375mm
+        public static final Transform3d robotToCamera0 = new Transform3d(
+                new Translation3d(293.896 / 1000.0, -310.920 / 1000.0, 247.375 / 1000.0),
+                new Rotation3d(0, Math.toRadians(-20), Math.toRadians(45)));
+
+        // Right camera transform
+        // pitch -20, yaw -45, roll 0
+        // x -310.920mm, y -293.896mm, z 247.375mm
+        public static final Transform3d robotToCamera1 = new Transform3d(
+                new Translation3d(293.896 / 1000.0, 310.920 / 1000.0, 247.375 / 1000.0),
+                new Rotation3d(0, Math.toRadians(-20), Math.toRadians(-45)));
 
         // Standard deviation multipliers for each camera
         public static final double[] cameraStdDevFactors = new double[] {
@@ -105,5 +114,18 @@ public class Constants {
         // Multipliers to apply for MegaTag 2 observations
         public static final double linearStdDevMegatag2Factor = 0.5;
         public static final double angularStdDevMegatag2Factor = Double.POSITIVE_INFINITY;
+
+        // Camera simulation properties
+        public static final int cameraFPS = 30;
+        public static final int cameraResolutionWidth = 640;
+        public static final int cameraResolutionHeight = 480;
+        public static final double cameraFOVDegrees = 80.0;
+    }
+
+    public class constAutoAlign {
+        public static final Transform3d goalOffset = new Transform3d(new Translation3d(Units.inchesToMeters(12), 0, 0),
+                new Rotation3d(0, 0, 0));
+        public static final double speedMod = 0.5;
+        public static final double pathTime = 3.7;
     }
 }

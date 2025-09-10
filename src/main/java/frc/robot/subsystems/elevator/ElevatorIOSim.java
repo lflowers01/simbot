@@ -42,6 +42,7 @@ public class ElevatorIOSim extends ElevatorIO.TalonFXBase {
         simState.setRawRotorPosition(elevatorSim.getPositionMeters() * constElevator.rotationsPerMeter);
         simState.setRotorVelocity(0);
         targetMeters = elevatorSim.getPositionMeters();
+
     }
 
     @Override
