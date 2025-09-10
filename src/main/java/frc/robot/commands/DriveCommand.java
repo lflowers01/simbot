@@ -64,15 +64,15 @@ public class DriveCommand extends Command {
         // Apply deadband to joystick inputs
         double translationValue = MathUtil.applyDeadband(
                 rawTranslation,
-                constDrivetrain.DEADBAND,
+                constDrivetrain.deadband,
                 1);
         double strafeValue = MathUtil.applyDeadband(
                 rawStrafe,
-                constDrivetrain.DEADBAND,
+                constDrivetrain.deadband,
                 1);
         double rotationValue = MathUtil.applyDeadband(
                 rawRotation,
-                constDrivetrain.DEADBAND,
+                constDrivetrain.deadband,
                 1);
 
         // Calculate magnitude before applying curve to preserve direction
@@ -81,7 +81,7 @@ public class DriveCommand extends Command {
         // Only apply processing if there's actual input
         if (magnitude > 0) {
             // Apply configurable exponent to magnitude while preserving direction
-            double curvedMagnitude = Math.pow(magnitude, constDrivetrain.INPUT_CURVE);
+            double curvedMagnitude = Math.pow(magnitude, constDrivetrain.inputCurve);
 
             // Scale back to individual components
             double scale = curvedMagnitude / magnitude;
@@ -90,13 +90,13 @@ public class DriveCommand extends Command {
         }
 
         // Apply curve to rotation separately
-        rotationValue = Math.copySign(Math.pow(Math.abs(rotationValue), constDrivetrain.INPUT_CURVE), rotationValue);
+        rotationValue = Math.copySign(Math.pow(Math.abs(rotationValue), constDrivetrain.inputCurve), rotationValue);
 
         // Scale the output if slow drive is enabled
         if (m_slowDrive.getAsBoolean()) {
-            translationValue *= constDrivetrain.HALF_SPEED_FACTOR;
-            strafeValue *= constDrivetrain.HALF_SPEED_FACTOR;
-            rotationValue *= constDrivetrain.HALF_SPEED_FACTOR;
+            translationValue *= constDrivetrain.halfSpeedFactor;
+            strafeValue *= constDrivetrain.halfSpeedFactor;
+            rotationValue *= constDrivetrain.halfSpeedFactor;
         }
 
         // Translate input into velocities
@@ -105,11 +105,11 @@ public class DriveCommand extends Command {
         rotationValue *= m_maxAngularRate;
 
         // Use raw rotation input for triggering to avoid false negatives from deadband
-        boolean rotationTriggered = Math.abs(rawRotation) > constDrivetrain.DEADBAND;
+        boolean rotationTriggered = Math.abs(rawRotation) > constDrivetrain.deadband;
         boolean rotationActive = MathUtil.isNear(m_driveSubsystem.rotationLastTriggered, Timer.getFPGATimestamp(),
-                constDrivetrain.ROTATION_ACTIVE_TIMEOUT) &&
+                constDrivetrain.rotationActiveTimeout) &&
                 (Math.abs(m_driveSubsystem.getState().Speeds.omegaRadiansPerSecond) > Math
-                        .toRadians(constDrivetrain.ROTATION_ACTIVE_THRESHOLD_DEGREES));
+                        .toRadians(constDrivetrain.rotationActiveThresholdDegrees));
 
         if (rotationTriggered) {
             m_driveSubsystem.rotationLastTriggered = Timer.getFPGATimestamp();

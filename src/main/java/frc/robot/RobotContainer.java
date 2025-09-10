@@ -17,6 +17,7 @@ import edu.wpi.first.wpilibj2.command.button.RobotModeTriggers;
 
 import frc.robot.Constants.constDrivetrain;
 import frc.robot.Constants.constElevator;
+import frc.robot.Constants.constVision;
 import frc.robot.commands.DriveCommand;
 import frc.robot.generated.TunerConstants;
 import frc.robot.subsystems.drive.Drive;
@@ -24,16 +25,18 @@ import frc.robot.subsystems.elevator.Elevator;
 import frc.robot.subsystems.elevator.ElevatorIOReal;
 import frc.robot.subsystems.elevator.ElevatorIOSim;
 import frc.robot.subsystems.vision.Vision;
+import frc.robot.subsystems.vision.VisionIOPhotonVision;
+import frc.robot.subsystems.vision.VisionIOPhotonVisionSim;
 
 public class RobotContainer {
 
-        private final double maxSpeed = constDrivetrain.MAX_SPEED * constDrivetrain.SPEED_MODIFIER;
-        private final double maxAngularRate = RotationsPerSecond.of(constDrivetrain.MAX_ANGULAR_RATE)
+        private final double maxSpeed = constDrivetrain.maxSpeed * constDrivetrain.speedModifier;
+        private final double maxAngularRate = RotationsPerSecond.of(constDrivetrain.maxAngularRate)
                         .in(RadiansPerSecond);
 
         private final SwerveRequest.FieldCentric drive = new SwerveRequest.FieldCentric()
-                        .withDeadband(maxSpeed * constDrivetrain.DEADBAND_PERCENT)
-                        .withRotationalDeadband(maxAngularRate * constDrivetrain.DEADBAND_PERCENT)
+                        .withDeadband(maxSpeed * constDrivetrain.deadbandPercent)
+                        .withRotationalDeadband(maxAngularRate * constDrivetrain.deadbandPercent)
                         .withDriveRequestType(DriveRequestType.OpenLoopVoltage);
 
         private final SwerveRequest.SwerveDriveBrake brake = new SwerveRequest.SwerveDriveBrake();
@@ -43,21 +46,35 @@ public class RobotContainer {
         private final SwerveRequest.Idle idle = new SwerveRequest.Idle();
 
         private final Telemetry logger = new Telemetry(maxSpeed);
-        private final CommandXboxController joystick = new CommandXboxController(constDrivetrain.JOYSTICK_PORT);
+        private final CommandXboxController joystick = new CommandXboxController(constDrivetrain.joystickPort);
 
         public final Drive drivetrain = TunerConstants.createDrivetrain();
         private final Elevator elevator;
-        public Vision vision;
+        private final Vision vision;
 
         public RobotContainer() {
                 if (RobotBase.isReal()) {
+
                         System.out.println("Running Elevator in Real Mode");
                         elevator = new Elevator(new ElevatorIOReal());
+                        vision = new Vision(
+                                        drivetrain::addVisionMeasurement,
+                                        new VisionIOPhotonVision(constVision.camera0Name,
+                                                        constVision.robotToCamera0),
+                                        new VisionIOPhotonVision(constVision.camera1Name,
+                                                        constVision.robotToCamera1));
+
                 } else {
                         System.out.println("Running Elevator in Sim Mode");
                         elevator = new Elevator(new ElevatorIOSim());
+                        vision = new Vision(
+                                        drivetrain::addVisionMeasurement,
+                                        new VisionIOPhotonVisionSim(constVision.camera0Name,
+                                                        constVision.robotToCamera0, drivetrain::getPose),
+                                        new VisionIOPhotonVisionSim(constVision.camera1Name,
+                                                        constVision.robotToCamera1, drivetrain::getPose));
+
                 }
-                vision = new Vision(drivetrain::addVisionMeasurement);
                 configureBindings();
         }
 
@@ -97,12 +114,12 @@ public class RobotContainer {
 
                 joystick.leftBumper().onTrue(drivetrain.runOnce(() -> drivetrain.seedFieldCentric()));
 
-                joystick.x().onTrue(new InstantCommand(() -> elevator.setHeight(constElevator.IDLE)));
+                joystick.x().onTrue(new InstantCommand(() -> elevator.setHeight(constElevator.idle)));
 
-                joystick.pov(180).onTrue(new InstantCommand(() -> elevator.setHeight(constElevator.L1)));
-                joystick.pov(270).onTrue(new InstantCommand(() -> elevator.setHeight(constElevator.L2)));
-                joystick.pov(0).onTrue(new InstantCommand(() -> elevator.setHeight(constElevator.L3)));
-                joystick.pov(90).onTrue(new InstantCommand(() -> elevator.setHeight(constElevator.L4)));
+                joystick.pov(180).onTrue(new InstantCommand(() -> elevator.setHeight(constElevator.l1)));
+                joystick.pov(270).onTrue(new InstantCommand(() -> elevator.setHeight(constElevator.l2)));
+                joystick.pov(0).onTrue(new InstantCommand(() -> elevator.setHeight(constElevator.l3)));
+                joystick.pov(90).onTrue(new InstantCommand(() -> elevator.setHeight(constElevator.l4)));
 
                 // VISION - Remove the manual periodic call
                 // vision.periodic(); // Remove this line
@@ -110,9 +127,4 @@ public class RobotContainer {
                 drivetrain.registerTelemetry(logger::telemeterize);
         }
 
-        public void simulationPeriodic() {
-                if (vision != null) {
-                        vision.simulationPeriodic(drivetrain.getPose());
-                }
-        }
 }

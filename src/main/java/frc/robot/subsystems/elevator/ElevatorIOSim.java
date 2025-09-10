@@ -39,7 +39,7 @@ public class ElevatorIOSim extends ElevatorIO.TalonFXBase {
                 constElevator.color));
         SmartDashboard.putData("ElevatorSim", mech2d);
 
-        simState.setRawRotorPosition(elevatorSim.getPositionMeters() * constElevator.ROTATIONS_PER_METER);
+        simState.setRawRotorPosition(elevatorSim.getPositionMeters() * constElevator.rotationsPerMeter);
         simState.setRotorVelocity(0);
         targetMeters = elevatorSim.getPositionMeters();
     }
@@ -50,8 +50,8 @@ public class ElevatorIOSim extends ElevatorIO.TalonFXBase {
         elevatorSim.setInputVoltage(simState.getMotorVoltage());
         elevatorSim.update(constElevator.simulationTick);
 
-        simState.setRawRotorPosition(elevatorSim.getPositionMeters() * constElevator.ROTATIONS_PER_METER);
-        simState.setRotorVelocity(elevatorSim.getVelocityMetersPerSecond() * constElevator.ROTATIONS_PER_METER);
+        simState.setRawRotorPosition(elevatorSim.getPositionMeters() * constElevator.rotationsPerMeter);
+        simState.setRotorVelocity(elevatorSim.getVelocityMetersPerSecond() * constElevator.rotationsPerMeter);
 
         super.updateInputs(inputs);
 

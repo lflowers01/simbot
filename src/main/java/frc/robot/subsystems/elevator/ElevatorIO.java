@@ -34,40 +34,40 @@ public interface ElevatorIO {
         protected double targetMeters = 0.0;
 
         public TalonFXBase() {
-            leadMotor = new TalonFX(constElevator.LEAD_MOTOR_ID);
-            followerMotor = new TalonFX(constElevator.FOLLOW_MOTOR_ID);
+            leadMotor = new TalonFX(constElevator.leadMotorId);
+            followerMotor = new TalonFX(constElevator.followMotorId);
             control = new MotionMagicVoltage(0);
 
             TalonFXConfiguration config = new TalonFXConfiguration();
 
-            config.Slot0.kG = constElevator.KG;
-            config.Slot0.kS = constElevator.KS;
-            config.Slot0.kV = constElevator.KV;
-            config.Slot0.kA = constElevator.KA;
-            config.Slot0.kP = constElevator.KP;
-            config.Slot0.kI = constElevator.KI;
-            config.Slot0.kD = constElevator.KD;
+            config.Slot0.kG = constElevator.kG;
+            config.Slot0.kS = constElevator.kS;
+            config.Slot0.kV = constElevator.kV;
+            config.Slot0.kA = constElevator.kA;
+            config.Slot0.kP = constElevator.kP;
+            config.Slot0.kI = constElevator.kI;
+            config.Slot0.kD = constElevator.kD;
 
             MotionMagicConfigs motionMagic = config.MotionMagic;
-            motionMagic.MotionMagicCruiseVelocity = constElevator.motionVelocity * constElevator.ROTATIONS_PER_METER;
-            motionMagic.MotionMagicAcceleration = constElevator.motionAcceleration * constElevator.ROTATIONS_PER_METER;
-            motionMagic.MotionMagicExpo_kA = constElevator.EXPO_KA;
-            motionMagic.MotionMagicExpo_kV = constElevator.EXPO_KV;
+            motionMagic.MotionMagicCruiseVelocity = constElevator.motionVelocity * constElevator.rotationsPerMeter;
+            motionMagic.MotionMagicAcceleration = constElevator.motionAcceleration * constElevator.rotationsPerMeter;
+            motionMagic.MotionMagicExpo_kA = constElevator.expoKA;
+            motionMagic.MotionMagicExpo_kV = constElevator.expoKV;
 
             SoftwareLimitSwitchConfigs softLimits = config.SoftwareLimitSwitch;
             softLimits.ForwardSoftLimitEnable = true;
             softLimits.ReverseSoftLimitEnable = true;
-            softLimits.ForwardSoftLimitThreshold = constElevator.maxHeightMeters * constElevator.ROTATIONS_PER_METER;
-            softLimits.ReverseSoftLimitThreshold = constElevator.minHeightMeters * constElevator.ROTATIONS_PER_METER;
+            softLimits.ForwardSoftLimitThreshold = constElevator.maxHeightMeters * constElevator.rotationsPerMeter;
+            softLimits.ReverseSoftLimitThreshold = constElevator.minHeightMeters * constElevator.rotationsPerMeter;
 
             leadMotor.getConfigurator().apply(config);
-            followerMotor.setControl(new Follower(constElevator.LEAD_MOTOR_ID, true));
+            followerMotor.setControl(new Follower(constElevator.leadMotorId, true));
         }
 
         @Override
         public void setHeight(double meters) {
             targetMeters = meters;
-            leadMotor.setControl(control.withPosition(meters * constElevator.ROTATIONS_PER_METER));
+            leadMotor.setControl(control.withPosition(meters * constElevator.rotationsPerMeter));
         }
 
         @Override
