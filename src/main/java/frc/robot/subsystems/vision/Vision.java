@@ -39,6 +39,9 @@ public class Vision extends SubsystemBase {
     private final Alert[] disconnectedAlerts;
     private Pose2d latestAcceptedVisionPose = null;
 
+    // Configurable triangle detection parameters
+    private static final double DETECTION_TRIANGLE_ANGLE_DEGREES = 120.0; // Change this to adjust triangle angle
+
     public Vision(VisionConsumer consumer, VisionIO... io) {
         this.consumer = consumer;
         this.io = io;
@@ -68,9 +71,10 @@ public class Vision extends SubsystemBase {
     }
 
     /**
-     * Returns the best tag pose using alliance-specific filtering.
-     * Finds the closest unobstructed tag that is in the allowed alliance tags list.
-     * Biases towards tags that are facing more directly towards the robot.
+     * Returns the best tag pose using alliance-specific filtering and isosceles triangle detection.
+     * Creates isosceles triangles from each tag facing outward with configurable angle and maxTagDistance altitude.
+     * Selects the tag whose triangle the robot is most centered within.
+     * If no triangles contain the robot, falls back to the closest detected alliance tag.
      * 
      * @return The best tag pose, or null if no valid tags are found
      */
@@ -97,7 +101,6 @@ public class Vision extends SubsystemBase {
         }
 
         // Use the observed pose from vision observations as robot position
-        // This gives us the most accurate position for distance calculations
         Pose2d currentRobotPose = null;
 
         // Find the most recent accepted pose observation to use as robot position
@@ -123,133 +126,173 @@ public class Vision extends SubsystemBase {
         }
 
         if (currentRobotPose == null) {
-            System.out.println("No robot pose available for distance calculation");
+            System.out.println("No robot pose available for triangle calculation");
             return null;
         }
 
-        System.out.println("Using robot pose for distance calc: " + currentRobotPose);
+        System.out.println("Using robot pose for triangle calc: " + currentRobotPose);
+
+        // Isosceles triangle parameters
+        final double TRIANGLE_ANGLE_RADIANS = Math.toRadians(DETECTION_TRIANGLE_ANGLE_DEGREES);
+        final double TRIANGLE_ALTITUDE = constVision.maxTagDistance; // Altitude from tag to opposite side
+        final double HALF_TRIANGLE_ANGLE = TRIANGLE_ANGLE_RADIANS / 2.0;
+
+        System.out.println("Triangle parameters: angle=" + DETECTION_TRIANGLE_ANGLE_DEGREES + "°, altitude=" + TRIANGLE_ALTITUDE + "m");
 
         Pose3d bestTagPose = null;
-        double bestScore = Double.POSITIVE_INFINITY;
+        double bestTriangleScore = 0.0; // Higher score = more centered in triangle
         int bestTagId = -1;
         int candidateCount = 0;
 
-        // Loop through all cameras
+        // Check if robot is detected by any camera (must have valid observations)
+        boolean hasValidObservations = false;
         for (int cameraIndex = 0; cameraIndex < inputs.length; cameraIndex++) {
-            if (!inputs[cameraIndex].connected) {
-                System.out.println("Camera " + cameraIndex + " not connected, skipping");
+            if (!inputs[cameraIndex].connected)
+                continue;
+
+            for (var observation : inputs[cameraIndex].poseObservations) {
+                if (observation.tagCount() > 0 &&
+                        observation.ambiguity() <= constVision.maxAmbiguity &&
+                        Math.abs(observation.pose().getZ()) <= constVision.maxZError) {
+                    hasValidObservations = true;
+                    break;
+                }
+            }
+            if (hasValidObservations)
+                break;
+        }
+
+        if (!hasValidObservations) {
+            System.out.println("No valid vision observations available");
+            return null;
+        }
+
+        // Track closest tag for fallback
+        Pose3d closestTagPose = null;
+        double closestTagDistance = Double.POSITIVE_INFINITY;
+        int closestTagId = -1;
+
+        // Loop through all alliance tags and check isosceles triangle intersections
+        for (int tagId : allianceTagIds) {
+            candidateCount++;
+
+            // Get the tag pose from the AprilTag layout
+            var tagPoseOptional = constVision.aprilTagLayout.getTagPose(tagId);
+            if (!tagPoseOptional.isPresent()) {
+                System.out.println("Tag " + tagId + ": Pose not found in layout, skipping");
                 continue;
             }
 
-            System.out.println("Camera " + cameraIndex + ": " + inputs[cameraIndex].tagIds.length +
-                    " tags detected, " + inputs[cameraIndex].poseObservations.length + " observations");
+            var tagPose = tagPoseOptional.get();
 
-            // Check each detected tag ID for alliance membership and get its pose
-            for (int tagId : inputs[cameraIndex].tagIds) {
-                candidateCount++;
+            // Check if tag is detected by any camera
+            boolean tagDetected = false;
+            for (int cameraIndex = 0; cameraIndex < inputs.length; cameraIndex++) {
+                if (!inputs[cameraIndex].connected)
+                    continue;
 
-                // Check if this tag is in the allowed alliance list
-                boolean isAllowedTag = false;
-                for (int allowedId : allianceTagIds) {
-                    if (tagId == allowedId) {
-                        isAllowedTag = true;
+                for (int detectedTagId : inputs[cameraIndex].tagIds) {
+                    if (detectedTagId == tagId) {
+                        tagDetected = true;
                         break;
                     }
                 }
+                if (tagDetected)
+                    break;
+            }
 
-                if (!isAllowedTag) {
-                    System.out.println("Tag " + tagId + ": Not an alliance tag, skipping");
-                    continue;
-                }
+            if (!tagDetected) {
+                System.out.println("Tag " + tagId + ": Not currently detected by any camera, skipping");
+                continue;
+            }
 
-                // Get the tag pose from the AprilTag layout
-                var tagPoseOptional = constVision.aprilTagLayout.getTagPose(tagId);
-                if (!tagPoseOptional.isPresent()) {
-                    System.out.println("Tag " + tagId + ": Pose not found in layout, skipping");
-                    continue;
-                }
+            // Calculate distance for fallback tracking
+            var tagPosition = tagPose.getTranslation().toTranslation2d();
+            var robotPosition = currentRobotPose.getTranslation();
+            var tagToRobot = robotPosition.minus(tagPosition);
+            double distanceToRobot = tagToRobot.getNorm();
 
-                var tagPose = tagPoseOptional.get();
+            // Update closest tag for fallback
+            if (distanceToRobot < closestTagDistance && distanceToRobot <= constVision.maxTagDistance) {
+                closestTagDistance = distanceToRobot;
+                closestTagPose = tagPose;
+                closestTagId = tagId;
+            }
 
-                // Calculate direct distance from robot to tag (2D distance for consistency)
-                double distanceFromRobot = currentRobotPose.getTranslation()
-                        .getDistance(tagPose.getTranslation().toTranslation2d());
+            // Calculate isosceles triangle parameters
+            var tagFacingDirection = tagPose.getRotation().toRotation2d(); // Tag faces in its +X direction
 
-                // Skip if too far
-                if (distanceFromRobot > constVision.maxTagDistance) {
-                    System.out.println("Tag " + tagId + ": Too far (" +
-                            String.format("%.2f", distanceFromRobot) + "m > " + constVision.maxTagDistance + "m)");
-                    continue;
-                }
+            // Check if robot is within triangle altitude (distance along the facing direction)
+            if (distanceToRobot > TRIANGLE_ALTITUDE || distanceToRobot < 0.1) {
+                System.out.println("Tag " + tagId + ": Robot distance invalid (" +
+                        String.format("%.2f", distanceToRobot) + "m, range: 0.1-" + TRIANGLE_ALTITUDE + "m)");
+                continue;
+            }
 
-                // Find the best observation of this tag from this camera
-                double bestObservationScore = Double.POSITIVE_INFINITY;
-                for (var observation : inputs[cameraIndex].poseObservations) {
-                    // Skip invalid observations
-                    if (observation.tagCount() == 0 ||
-                            observation.ambiguity() > constVision.maxAmbiguity ||
-                            Math.abs(observation.pose().getZ()) > constVision.maxZError ||
-                            observation.averageTagDistance() > constVision.maxTagDistance) {
-                        continue;
-                    }
+            // Calculate angle from tag facing direction to robot
+            var robotAngleFromTag = Math.atan2(tagToRobot.getY(), tagToRobot.getX());
+            var angleDifferenceFromFacing = robotAngleFromTag - tagFacingDirection.getRadians();
+            
+            // Normalize angle difference to [-π, π]
+            while (angleDifferenceFromFacing > Math.PI) {
+                angleDifferenceFromFacing -= 2 * Math.PI;
+            }
+            while (angleDifferenceFromFacing < -Math.PI) {
+                angleDifferenceFromFacing += 2 * Math.PI;
+            }
+            
+            // Take absolute value for triangle check
+            double absAngleDifference = Math.abs(angleDifferenceFromFacing);
 
-                    // Calculate tag facing angle (how well the tag faces toward the robot)
-                    var tagFacingAngle = tagPose.getRotation().toRotation2d().getRadians();
-                    var tagToRobot = currentRobotPose.getTranslation()
-                            .minus(tagPose.getTranslation().toTranslation2d());
-                    var angleFromTag = Math.atan2(tagToRobot.getY(), tagToRobot.getX());
+            // For isosceles triangle: check if robot is within the triangle angle
+            double maxAllowedAngle = HALF_TRIANGLE_ANGLE;
+            
+            if (absAngleDifference > maxAllowedAngle) {
+                System.out.println("Tag " + tagId + ": Robot outside triangle (" +
+                        String.format("%.1f", Math.toDegrees(absAngleDifference)) + "° > " +
+                        String.format("%.1f", Math.toDegrees(maxAllowedAngle)) + "°)");
+                continue;
+            }
 
-                    var angleDifference = Math.abs(tagFacingAngle - angleFromTag);
-                    if (angleDifference > Math.PI) {
-                        angleDifference = 2 * Math.PI - angleDifference;
-                    }
+            // Robot is inside the isosceles triangle - calculate quality score
+            double angleScore = 1.0 - (absAngleDifference / maxAllowedAngle); // 1.0 = perfectly centered, 0.0 = at edge
+            double distanceScore = 1.0 - (distanceToRobot / TRIANGLE_ALTITUDE); // 1.0 = very close, 0.0 = at max distance
 
-                    // Normalize angle factor (0.0 = facing directly, 1.0 = facing away)
-                    double angleFactor = angleDifference / Math.PI;
+            // Combine scores with emphasis on being centered in the triangle
+            double triangleScore = (angleScore * 0.7) + (distanceScore * 0.3);
 
-                    // Calculate scoring components - balance the weights better
-                    double distanceComponent = distanceFromRobot * constVision.distanceWeight;
-                    double skewComponent = angleFactor * constVision.skewWeight;
-                    double ambiguityComponent = observation.ambiguity() * constVision.ambiguityWeight;
-                    // Multi-tag bonus should reduce score (negative component)
-                    double multiTagComponent = -(observation.tagCount() > 1 ? constVision.multiTagWeight : 0.0);
+            System.out.println("Tag " + tagId + ": INSIDE TRIANGLE - " +
+                    "dist=" + String.format("%.2f", distanceToRobot) + "m, " +
+                    "angle_diff=" + String.format("%.1f", Math.toDegrees(absAngleDifference)) + "°, " +
+                    "triangle_score=" + String.format("%.3f", triangleScore) + " " +
+                    "(angle:" + String.format("%.3f", angleScore) + " dist:" + String.format("%.3f", distanceScore) + ")");
 
-                    double observationScore = distanceComponent + skewComponent + ambiguityComponent
-                            + multiTagComponent;
-
-                    if (observationScore < bestObservationScore) {
-                        bestObservationScore = observationScore;
-                    }
-                }
-
-                if (bestObservationScore == Double.POSITIVE_INFINITY) {
-                    System.out.println("Tag " + tagId + ": No valid observations found");
-                    continue;
-                }
-
-                System.out.println("Tag " + tagId + ": " +
-                        "dist=" + String.format("%.2f", distanceFromRobot) + "m, " +
-                        "score=" + String.format("%.2f", bestObservationScore));
-
-                // Update best tag if this has a better score
-                if (bestObservationScore < bestScore) {
-                    bestScore = bestObservationScore;
-                    bestTagPose = tagPose;
-                    bestTagId = tagId;
-                    System.out.println("New best tag " + tagId + " with score: " + String.format("%.2f", bestScore));
-                }
+            // Update best tag if this has a better triangle score
+            if (triangleScore > bestTriangleScore) {
+                bestTriangleScore = triangleScore;
+                bestTagPose = tagPose;
+                bestTagId = tagId;
+                System.out.println("New best tag " + tagId + " with triangle score: " + String.format("%.3f", bestTriangleScore));
             }
         }
 
-        System.out.println("Total tags checked: " + candidateCount);
+        System.out.println("Total alliance tags checked: " + candidateCount);
 
+        // Check if we found a tag within a triangle
         if (bestTagPose != null) {
-            System.out.println("Final best tag " + bestTagId + " with score: " + String.format("%.2f", bestScore));
-        } else {
-            System.out.println("No valid alliance tags found");
+            System.out.println("Final best tag " + bestTagId + " with triangle score: " + String.format("%.3f", bestTriangleScore));
+            return bestTagPose;
         }
 
-        return bestTagPose;
+        // Fallback: if robot not inside any triangle, use closest detected alliance tag
+        if (closestTagPose != null) {
+            System.out.println("FALLBACK: Robot not inside any triangle, using closest tag " + closestTagId + 
+                    " at distance " + String.format("%.2f", closestTagDistance) + "m");
+            return closestTagPose;
+        }
+
+        System.out.println("No valid alliance tags found (neither in triangles nor within max distance)");
+        return null;
     }
 
     /**
@@ -258,6 +301,7 @@ public class Vision extends SubsystemBase {
      * @return The latest vision robot pose, or null if no valid vision data is
      *         available
      */
+
     public Pose2d getLatestVisionPose() {
         return latestAcceptedVisionPose;
     }
@@ -269,13 +313,14 @@ public class Vision extends SubsystemBase {
             Logger.processInputs("Vision/Camera" + Integer.toString(i), inputs[i]);
         }
 
-        // Initialize logging values
-        List<Pose3d> allTagPoses = new LinkedList<>();
-        List<Pose3d> allRobotPoses = new LinkedList<>();
-        List<Pose3d> allRobotPosesAccepted = new LinkedList<>();
-        List<Pose3d> allRobotPosesRejected = new LinkedList<>();
+    // Initialize logging values
+    // 
+    List<Pose3d> allTagPoses = new LinkedList<>();
+    List<Pose3d> allRobotPoses = new LinkedList<>();
+    List<Pose3d> allRobotPosesAccepted = new LinkedList<>();
+        List<Pose3d>allRobotPosesRejected=new LinkedList<>();
 
-        // Loop over cameras
+    // Loop over cameras 
         for (int cameraIndex = 0; cameraIndex < io.length; cameraIndex++) {
             // Update disconnected alert
             disconnectedAlerts[cameraIndex].set(!inputs[cameraIndex].connected);
