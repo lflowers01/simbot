@@ -78,6 +78,20 @@ public class Constants {
         public static final double maxAmbiguity = 0.4;
         public static final double maxZError = 0.3; // Meters
 
+        // Tag filtering for auto-alignment
+        public static final double maxTagDistance = 9.0; // Maximum distance to consider tags (meters)
+        public static final int[] blueTagIds = { 17, 18, 19, 20, 21, 22 };
+        public static final int[] redTagIds = { 6, 7, 8, 9, 10, 11 };
+
+        // Tag selection scoring weights (all values represent penalty/bonus in meters)
+        public static final double distanceWeight = 2.0; // Weight for distance component (1.0 = 1 meter = 1 point)
+        public static final double skewWeight = 3.5; // Weight for tag orientation penalty (higher = more bias towards
+                                                     // front-facing tags)
+        public static final double ambiguityWeight = 0.25; // Weight for ambiguity penalty (higher = more penalty for
+                                                           // uncertain detections)
+        public static final double multiTagWeight = 0; // Weight for multi-tag bonus (negative = bonus, positive =
+                                                       // penalty)
+
         // Standard deviation baselines, for 1 meter distance and 1 tag
         public static final double linearStdDevBaseline = 0.01; // Meters
         public static final double angularStdDevBaseline = 5.0; // Degrees
@@ -123,9 +137,11 @@ public class Constants {
     }
 
     public class constAutoAlign {
-        public static final Transform3d goalOffset = new Transform3d(new Translation3d(Units.inchesToMeters(12), 0, 0),
-                new Rotation3d(0, 0, 0));
-        public static final double speedMod = 0.5;
+        // Position robot 18 inches in front of the tag, facing the tag
+        public static final Transform3d goalOffset = new Transform3d(
+                new Translation3d(Units.inchesToMeters(18), 0, 0), // 18 inches back from tag (in tag's -X direction)
+                new Rotation3d(0, 0, Math.toRadians(180))); // 180 degrees rotation to face the tag
+        public static final double speedMod = 1.0; // Full speed for aggressive movement
         public static final double pathTime = 3.7;
     }
 }

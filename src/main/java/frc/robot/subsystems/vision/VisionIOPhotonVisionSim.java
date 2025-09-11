@@ -46,13 +46,17 @@ public class VisionIOPhotonVisionSim extends VisionIOPhotonVision {
       visionSim.addAprilTags(constVision.aprilTagLayout);
     }
 
-    // Add sim camera
+    // Add sim camera with unlimited FPS for reliable detection
     var cameraProperties = new SimCameraProperties();
-    cameraProperties.setFPS(constVision.cameraFPS);
-    cameraProperties.setCalibration(constVision.cameraResolutionWidth, constVision.cameraResolutionHeight, Rotation2d.fromDegrees(constVision.cameraFOVDegrees));
+    // Remove FPS limit to ensure tags are always detected when visible
+    // cameraProperties.setFPS(constVision.cameraFPS); // Commented out for
+    // unlimited FPS
+    cameraProperties.setCalibration(constVision.cameraResolutionWidth, constVision.cameraResolutionHeight,
+        Rotation2d.fromDegrees(constVision.cameraFOVDegrees));
 
     cameraSim = new PhotonCameraSim(camera, cameraProperties, constVision.aprilTagLayout);
     visionSim.addCamera(cameraSim, robotToCamera);
+
     // Enable the raw and processed streams. These are enabled by default.
     cameraSim.enableRawStream(true);
     cameraSim.enableProcessedStream(true);

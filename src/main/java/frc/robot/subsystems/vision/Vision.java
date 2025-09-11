@@ -22,6 +22,8 @@ import edu.wpi.first.math.numbers.N1;
 import edu.wpi.first.math.numbers.N3;
 import edu.wpi.first.wpilibj.Alert;
 import edu.wpi.first.wpilibj.Alert.AlertType;
+import edu.wpi.first.wpilibj.DriverStation;
+import edu.wpi.first.wpilibj.DriverStation.Alliance;
 import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 import edu.wpi.first.wpilibj2.command.SubsystemBase;
 import frc.robot.Constants.constVision;
@@ -35,6 +37,7 @@ public class Vision extends SubsystemBase {
     private final VisionIO[] io;
     private final VisionIOInputsAutoLogged[] inputs;
     private final Alert[] disconnectedAlerts;
+    private Pose2d latestAcceptedVisionPose = null;
 
     public Vision(VisionConsumer consumer, VisionIO... io) {
         this.consumer = consumer;
@@ -65,47 +68,198 @@ public class Vision extends SubsystemBase {
     }
 
     /**
-     * Returns the best tag pose from all cameras based on distance and ambiguity.
+     * Returns the best tag pose using alliance-specific filtering.
+     * Finds the closest unobstructed tag that is in the allowed alliance tags list.
+     * Biases towards tags that are facing more directly towards the robot.
      * 
      * @return The best tag pose, or null if no valid tags are found
      */
     public Pose3d getBestTagPose() {
-        Pose3d bestTagPose = null;
-        double bestScore = Double.POSITIVE_INFINITY;
-
-        // Loop through all cameras
-        for (int cameraIndex = 0; cameraIndex < inputs.length; cameraIndex++) {
-            if (!inputs[cameraIndex].connected) {
-                continue;
+        // Get alliance-specific tag IDs automatically
+        int[] allianceTagIds;
+        var alliance = DriverStation.getAlliance();
+        if (alliance.isPresent()) {
+            if (alliance.get() == Alliance.Blue) {
+                allianceTagIds = constVision.blueTagIds;
+                System.out.println("Alliance: Blue - Looking for tags: " + java.util.Arrays.toString(allianceTagIds));
+            } else {
+                allianceTagIds = constVision.redTagIds;
+                System.out.println("Alliance: Red - Looking for tags: " + java.util.Arrays.toString(allianceTagIds));
             }
+        } else {
+            // Default to all tags if alliance not available
+            allianceTagIds = new int[constVision.blueTagIds.length + constVision.redTagIds.length];
+            System.arraycopy(constVision.blueTagIds, 0, allianceTagIds, 0, constVision.blueTagIds.length);
+            System.arraycopy(constVision.redTagIds, 0, allianceTagIds, constVision.blueTagIds.length,
+                    constVision.redTagIds.length);
+            System.out
+                    .println("Alliance: Unknown - Looking for all tags: " + java.util.Arrays.toString(allianceTagIds));
+        }
 
-            // Loop through pose observations for this camera
+        // Use the observed pose from vision observations as robot position
+        // This gives us the most accurate position for distance calculations
+        Pose2d currentRobotPose = null;
+
+        // Find the most recent accepted pose observation to use as robot position
+        double latestTimestamp = 0.0;
+        for (int cameraIndex = 0; cameraIndex < inputs.length; cameraIndex++) {
+            if (!inputs[cameraIndex].connected)
+                continue;
+
             for (var observation : inputs[cameraIndex].poseObservations) {
-                // Skip if no tags or invalid observation
-                if (observation.tagCount() == 0
-                        || observation.ambiguity() > constVision.maxAmbiguity
-                        || Math.abs(observation.pose().getZ()) > constVision.maxZError) {
-                    continue;
-                }
-
-                // Calculate score based on distance and ambiguity (lower is better)
-                double score = observation.averageTagDistance() + (observation.ambiguity() * 2.0);
-
-                // Update best if this is better
-                if (score < bestScore) {
-                    bestScore = score;
-                    // Get the tag pose from the AprilTag layout
-                    if (inputs[cameraIndex].tagIds.length > 0) {
-                        var tagPose = constVision.aprilTagLayout.getTagPose(inputs[cameraIndex].tagIds[0]);
-                        if (tagPose.isPresent()) {
-                            bestTagPose = tagPose.get();
-                        }
-                    }
+                if (observation.timestamp() > latestTimestamp &&
+                        observation.tagCount() > 0 &&
+                        observation.ambiguity() <= constVision.maxAmbiguity &&
+                        Math.abs(observation.pose().getZ()) <= constVision.maxZError) {
+                    latestTimestamp = observation.timestamp();
+                    currentRobotPose = observation.pose().toPose2d();
                 }
             }
         }
 
+        // Fallback to stored vision pose if no current observations
+        if (currentRobotPose == null) {
+            currentRobotPose = getLatestVisionPose();
+        }
+
+        if (currentRobotPose == null) {
+            System.out.println("No robot pose available for distance calculation");
+            return null;
+        }
+
+        System.out.println("Using robot pose for distance calc: " + currentRobotPose);
+
+        Pose3d bestTagPose = null;
+        double bestScore = Double.POSITIVE_INFINITY;
+        int bestTagId = -1;
+        int candidateCount = 0;
+
+        // Loop through all cameras
+        for (int cameraIndex = 0; cameraIndex < inputs.length; cameraIndex++) {
+            if (!inputs[cameraIndex].connected) {
+                System.out.println("Camera " + cameraIndex + " not connected, skipping");
+                continue;
+            }
+
+            System.out.println("Camera " + cameraIndex + ": " + inputs[cameraIndex].tagIds.length +
+                    " tags detected, " + inputs[cameraIndex].poseObservations.length + " observations");
+
+            // Check each detected tag ID for alliance membership and get its pose
+            for (int tagId : inputs[cameraIndex].tagIds) {
+                candidateCount++;
+
+                // Check if this tag is in the allowed alliance list
+                boolean isAllowedTag = false;
+                for (int allowedId : allianceTagIds) {
+                    if (tagId == allowedId) {
+                        isAllowedTag = true;
+                        break;
+                    }
+                }
+
+                if (!isAllowedTag) {
+                    System.out.println("Tag " + tagId + ": Not an alliance tag, skipping");
+                    continue;
+                }
+
+                // Get the tag pose from the AprilTag layout
+                var tagPoseOptional = constVision.aprilTagLayout.getTagPose(tagId);
+                if (!tagPoseOptional.isPresent()) {
+                    System.out.println("Tag " + tagId + ": Pose not found in layout, skipping");
+                    continue;
+                }
+
+                var tagPose = tagPoseOptional.get();
+
+                // Calculate direct distance from robot to tag (2D distance for consistency)
+                double distanceFromRobot = currentRobotPose.getTranslation()
+                        .getDistance(tagPose.getTranslation().toTranslation2d());
+
+                // Skip if too far
+                if (distanceFromRobot > constVision.maxTagDistance) {
+                    System.out.println("Tag " + tagId + ": Too far (" +
+                            String.format("%.2f", distanceFromRobot) + "m > " + constVision.maxTagDistance + "m)");
+                    continue;
+                }
+
+                // Find the best observation of this tag from this camera
+                double bestObservationScore = Double.POSITIVE_INFINITY;
+                for (var observation : inputs[cameraIndex].poseObservations) {
+                    // Skip invalid observations
+                    if (observation.tagCount() == 0 ||
+                            observation.ambiguity() > constVision.maxAmbiguity ||
+                            Math.abs(observation.pose().getZ()) > constVision.maxZError ||
+                            observation.averageTagDistance() > constVision.maxTagDistance) {
+                        continue;
+                    }
+
+                    // Calculate tag facing angle (how well the tag faces toward the robot)
+                    var tagFacingAngle = tagPose.getRotation().toRotation2d().getRadians();
+                    var tagToRobot = currentRobotPose.getTranslation()
+                            .minus(tagPose.getTranslation().toTranslation2d());
+                    var angleFromTag = Math.atan2(tagToRobot.getY(), tagToRobot.getX());
+
+                    var angleDifference = Math.abs(tagFacingAngle - angleFromTag);
+                    if (angleDifference > Math.PI) {
+                        angleDifference = 2 * Math.PI - angleDifference;
+                    }
+
+                    // Normalize angle factor (0.0 = facing directly, 1.0 = facing away)
+                    double angleFactor = angleDifference / Math.PI;
+
+                    // Calculate scoring components - balance the weights better
+                    double distanceComponent = distanceFromRobot * constVision.distanceWeight;
+                    double skewComponent = angleFactor * constVision.skewWeight;
+                    double ambiguityComponent = observation.ambiguity() * constVision.ambiguityWeight;
+                    // Multi-tag bonus should reduce score (negative component)
+                    double multiTagComponent = -(observation.tagCount() > 1 ? constVision.multiTagWeight : 0.0);
+
+                    double observationScore = distanceComponent + skewComponent + ambiguityComponent
+                            + multiTagComponent;
+
+                    if (observationScore < bestObservationScore) {
+                        bestObservationScore = observationScore;
+                    }
+                }
+
+                if (bestObservationScore == Double.POSITIVE_INFINITY) {
+                    System.out.println("Tag " + tagId + ": No valid observations found");
+                    continue;
+                }
+
+                System.out.println("Tag " + tagId + ": " +
+                        "dist=" + String.format("%.2f", distanceFromRobot) + "m, " +
+                        "score=" + String.format("%.2f", bestObservationScore));
+
+                // Update best tag if this has a better score
+                if (bestObservationScore < bestScore) {
+                    bestScore = bestObservationScore;
+                    bestTagPose = tagPose;
+                    bestTagId = tagId;
+                    System.out.println("New best tag " + tagId + " with score: " + String.format("%.2f", bestScore));
+                }
+            }
+        }
+
+        System.out.println("Total tags checked: " + candidateCount);
+
+        if (bestTagPose != null) {
+            System.out.println("Final best tag " + bestTagId + " with score: " + String.format("%.2f", bestScore));
+        } else {
+            System.out.println("No valid alliance tags found");
+        }
+
         return bestTagPose;
+    }
+
+    /**
+     * Returns the latest vision-estimated robot pose from accepted observations.
+     * 
+     * @return The latest vision robot pose, or null if no valid vision data is
+     *         available
+     */
+    public Pose2d getLatestVisionPose() {
+        return latestAcceptedVisionPose;
     }
 
     @Override
@@ -168,6 +322,9 @@ public class Vision extends SubsystemBase {
                     continue;
                 }
 
+                // Update latest accepted pose
+                latestAcceptedVisionPose = observation.pose().toPose2d();
+
                 // Calculate standard deviations
                 double stdDevFactor = Math.pow(observation.averageTagDistance(), 2.0) / observation.tagCount();
                 double linearStdDev = constVision.linearStdDevBaseline * stdDevFactor;
@@ -192,6 +349,7 @@ public class Vision extends SubsystemBase {
             Logger.recordOutput(
                     "Vision/Camera" + Integer.toString(cameraIndex) + "/TagPoses",
                     tagPoses.toArray(new Pose3d[tagPoses.size()]));
+
             Logger.recordOutput(
                     "Vision/Camera" + Integer.toString(cameraIndex) + "/RobotPoses",
                     robotPoses.toArray(new Pose3d[robotPoses.size()]));

@@ -10,6 +10,8 @@ import com.ctre.phoenix6.swerve.SwerveModule.DriveRequestType;
 import com.ctre.phoenix6.swerve.SwerveRequest;
 
 import edu.wpi.first.math.geometry.Rotation2d;
+import edu.wpi.first.wpilibj.DriverStation;
+import edu.wpi.first.wpilibj.DriverStation.Alliance;
 import edu.wpi.first.wpilibj.RobotBase;
 import edu.wpi.first.wpilibj2.command.InstantCommand;
 import edu.wpi.first.wpilibj2.command.button.CommandXboxController;
@@ -124,12 +126,29 @@ public class RobotContainer {
 
                 // Auto-align to best AprilTag when Y button is pressed
                 joystick.y().onTrue(new InstantCommand(() -> {
+                        System.out.println("Y button pressed - starting auto-align");
+
+                        // Get the best tag pose ONCE when button is pressed
                         var bestTagPose = vision.getBestTagPose();
+                        System.out.println("Best tag pose selected: " + bestTagPose);
+
                         if (bestTagPose != null) {
-                                new AutoAlignCommand(drivetrain, bestTagPose).schedule();
+                                System.out.println("Creating AutoAlignCommand with FIXED tag pose: " + bestTagPose);
+                                // The command will store this pose and NOT change it during execution
+                                new AutoAlignCommand(drivetrain, vision, bestTagPose).schedule();
                         } else {
                                 System.out.println("No valid AprilTag found for auto-alignment");
                         }
+                }));
+
+                // Debug vision system with Back button
+                joystick.back().onTrue(new InstantCommand(() -> {
+                        System.out.println("=== Vision Debug ===");
+                        var latestPose = vision.getLatestVisionPose();
+                        var bestTag = vision.getBestTagPose();
+                        System.out.println("Latest vision pose: " + latestPose);
+                        System.out.println("Best tag pose: " + bestTag);
+                        System.out.println("Current drivetrain pose: " + drivetrain.getPose());
                 }));
 
                 // VISION - Remove the manual periodic call
@@ -137,5 +156,4 @@ public class RobotContainer {
 
                 drivetrain.registerTelemetry(logger::telemeterize);
         }
-
 }
