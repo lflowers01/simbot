@@ -67,7 +67,7 @@ public class Constants {
         public static double minHeightMeters = Units.inchesToMeters(39.25);
         public static double maxHeightMeters = Units.inchesToMeters(93.75);
         public static double verticalOffset = Units.inchesToMeters(1.75); // Ground to bottom of elevator
-        public static double horizontalOffset = Units.inchesToMeters(11.00); // Center of robot to elevator
+        public static double horizontalOffset = Units.inchesToMeters(29.5); // Center of robot to elevator
         public static Color8Bit color = new Color8Bit(255, 0, 0);
         public static double lineWidth = 5;
         public static double rotationsPerMeter = gearing / (2 * Math.PI * drumRadius);
@@ -82,6 +82,10 @@ public class Constants {
         public static final double maxTagDistance = 9.0; // Maximum distance to consider tags (meters)
         public static final int[] blueTagIds = { 17, 18, 19, 20, 21, 22 };
         public static final int[] redTagIds = { 6, 7, 8, 9, 10, 11 };
+
+        // Triangle detection parameters for auto-alignment
+        public static final double detectionTriangleAngleDegrees = 120.0; // Angle of triangle detection zones for tag
+                                                                          // selection
 
         // Tag selection scoring weights (all values represent penalty/bonus in meters)
         public static final double distanceWeight = 2.0; // Weight for distance component (1.0 = 1 meter = 1 point)
@@ -138,10 +142,49 @@ public class Constants {
 
     public class constAutoAlign {
         // Position robot 18 inches in front of the tag, facing the tag
-        public static final Transform3d goalOffset = new Transform3d(
-                new Translation3d(Units.inchesToMeters(18), 0, 0), // 18 inches back from tag (in tag's -X direction)
+        public static final Transform3d goalOffsetLeft = new Transform3d(
+                new Translation3d(Units.inchesToMeters(18), Units.inchesToMeters(-6.5), 0), // 18 inches back from tag
+                                                                                            // (in tag's -X direction)
                 new Rotation3d(0, 0, Math.toRadians(180))); // 180 degrees rotation to face the tag
+        public static final Transform3d goalOffsetRight = new Transform3d(
+                new Translation3d(Units.inchesToMeters(18), Units.inchesToMeters(6.5), 0),
+                new Rotation3d(0, 0, Math.toRadians(180)));
         public static final double speedMod = 1.0; // Full speed for aggressive movement
-        public static final double pathTime = 3.7;
+    }
+
+    public class constAutoAlignTrajectory {
+        // Minimum distance thresholds
+        public static final double minTrajectoryDistance = 0.03; // 3cm minimum distance for trajectory generation
+        public static final double minMovementDistance = 0.05; // 5cm forward movement for close poses
+
+        // Trajectory speed multipliers (relative to base speeds)
+        public static final double velocityMultiplier = 1.5; // 50% faster than base auto-align speed
+        public static final double accelerationMultiplier = 1.2; // 20% faster acceleration
+        public static final double slowTrajectorySpeed = 0.1; // Very slow speed for minimal movements
+
+        // Waypoint generation parameters
+        public static final double translationBias = 0.2; // 25% of distance for translation waypoint
+        public static final double rotationBias = 0.8; // 75% of rotation at waypoint for rotation-first movement
+    }
+
+    public class constAutoAlignController {
+        // Translation PID gains
+        public static final double translationKP = 5.0; // Higher P gain for precise following
+        public static final double translationKI = 0.05; // No integral term
+        public static final double translationKD = 0.5; // Damping term
+
+        // Rotation PID gains
+        public static final double rotationKP = 8.5; // Much higher P gain for rotation
+        public static final double rotationKI = 0.15; // No integral term
+        public static final double rotationKD = 0.8; // Higher damping for rotation
+
+        // Rotation profile constraints multipliers
+        public static final double maxRotationSpeedMultiplier = 2.5; // Higher max rotation speed
+        public static final double maxRotationAccelerationMultiplier = 1.5; // Higher max rotation acceleration
+    }
+
+    public class constAutoAlignLogging {
+        public static final double logInterval = 0.5; // Log progress every 0.5 seconds
+        public static final double logTolerance = 0.02; // Tolerance for log timing
     }
 }

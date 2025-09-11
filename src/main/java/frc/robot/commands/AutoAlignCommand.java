@@ -18,12 +18,19 @@ import edu.wpi.first.wpilibj.Timer;
 import edu.wpi.first.wpilibj2.command.Command;
 import com.ctre.phoenix6.swerve.SwerveRequest;
 import frc.robot.Constants.constAutoAlign;
+import frc.robot.Constants.constAutoAlignTrajectory;
+import frc.robot.Constants.constAutoAlignController;
+import frc.robot.Constants.constAutoAlignLogging;
 import frc.robot.Constants.constDrivetrain;
 import frc.robot.subsystems.drive.Drive;
 import frc.robot.subsystems.vision.Vision;
 import java.util.List;
 
 public class AutoAlignCommand extends Command {
+        public enum AlignmentSide {
+                LEFT, RIGHT
+        }
+
         private final Drive drivetrain;
         private final Vision vision;
         private final HolonomicDriveController controller;
@@ -43,19 +50,20 @@ public class AutoAlignCommand extends Command {
                 // Check if poses are too close together
                 double distance = currentPose.getTranslation().getDistance(targetPose.getTranslation());
 
-                if (distance < 0.1) { // If less than 10cm apart
+                if (distance < constAutoAlignTrajectory.minTrajectoryDistance) {
                         System.out.println("Poses too close for trajectory generation. Distance: " + distance + "m");
                         // Create a simple stationary trajectory - don't try to generate a path
-                        TrajectoryConfig config = new TrajectoryConfig(0.1, 0.1); // Very slow speeds
+                        TrajectoryConfig config = new TrajectoryConfig(
+                                        constAutoAlignTrajectory.slowTrajectorySpeed,
+                                        constAutoAlignTrajectory.slowTrajectorySpeed);
 
                         // Create a minimal movement trajectory by moving slightly forward then to
                         // target
                         // Convert rotation to a translation vector
-                        double forwardDistance = 0.05; // 5cm forward
-                        double x = currentPose.getX()
-                                        + Math.cos(currentPose.getRotation().getRadians()) * forwardDistance;
-                        double y = currentPose.getY()
-                                        + Math.sin(currentPose.getRotation().getRadians()) * forwardDistance;
+                        double x = currentPose.getX() + Math.cos(currentPose.getRotation().getRadians())
+                                        * constAutoAlignTrajectory.minMovementDistance;
+                        double y = currentPose.getY() + Math.sin(currentPose.getRotation().getRadians())
+                                        * constAutoAlignTrajectory.minMovementDistance;
 
                         Pose2d intermediateNose = new Pose2d(x, y, currentPose.getRotation());
 
@@ -68,20 +76,21 @@ public class AutoAlignCommand extends Command {
 
                 // Create aggressive trajectory config with high speeds
                 TrajectoryConfig config = new TrajectoryConfig(
-                                constDrivetrain.maxSpeed * constAutoAlign.speedMod * 1.5, // 50% faster max velocity
-                                constDrivetrain.maxSpeed * constAutoAlign.speedMod * 1.2 // 20% faster acceleration
-                );
+                                constDrivetrain.maxSpeed * constAutoAlign.speedMod
+                                                * constAutoAlignTrajectory.velocityMultiplier,
+                                constDrivetrain.maxSpeed * constAutoAlign.speedMod
+                                                * constAutoAlignTrajectory.accelerationMultiplier);
 
                 // Create intermediate waypoint that prioritizes rotation first
-                // Calculate 25% of the way to target for rotation-biased movement
-                double rotationBias = 0.25;
-                double translationX = currentPose.getX() + (targetPose.getX() - currentPose.getX()) * rotationBias;
-                double translationY = currentPose.getY() + (targetPose.getY() - currentPose.getY()) * rotationBias;
+                // Calculate waypoint position for rotation-biased movement
+                double translationX = currentPose.getX()
+                                + (targetPose.getX() - currentPose.getX()) * constAutoAlignTrajectory.translationBias;
+                double translationY = currentPose.getY()
+                                + (targetPose.getY() - currentPose.getY()) * constAutoAlignTrajectory.translationBias;
 
-                // Interpolate rotation more aggressively (75% of target rotation at waypoint)
-                double rotationBias2 = 0.75;
+                // Interpolate rotation more aggressively for rotation-first movement
                 Rotation2d intermediateRotation = currentPose.getRotation().interpolate(targetPose.getRotation(),
-                                rotationBias2);
+                                constAutoAlignTrajectory.rotationBias);
 
                 Pose2d rotationBiasedWaypoint = new Pose2d(translationX, translationY, intermediateRotation);
 
@@ -95,7 +104,7 @@ public class AutoAlignCommand extends Command {
                 );
         }
 
-        public AutoAlignCommand(Drive drivetrain, Vision vision, Pose3d targetPose) {
+        public AutoAlignCommand(Drive drivetrain, Vision vision, Pose3d targetPose, AlignmentSide alignmentSide) {
                 this.drivetrain = drivetrain;
                 this.vision = vision;
                 addRequirements(drivetrain);
@@ -103,18 +112,24 @@ public class AutoAlignCommand extends Command {
                 // Store the target pose - this will NOT change during command execution
                 System.out.println("=== Auto-Align Command Created ===");
                 System.out.println("Target tag pose locked in: " + targetPose);
+                System.out.println("Alignment side: " + alignmentSide);
 
                 // More aggressive PID controller gains for precise trajectory following
                 this.controller = new HolonomicDriveController(
-                                new PIDController(5.0, 0.0, 0.5), // X controller: higher P gain, add D term
-                                new PIDController(5.0, 0.0, 0.5), // Y controller: higher P gain, add D term
-                                new ProfiledPIDController(8.0, 0.0, 0.8, // Rotation controller: much higher gains
+                                new PIDController(constAutoAlignController.translationKP,
+                                                constAutoAlignController.translationKI,
+                                                constAutoAlignController.translationKD), // X controller
+                                new PIDController(constAutoAlignController.translationKP,
+                                                constAutoAlignController.translationKI,
+                                                constAutoAlignController.translationKD), // Y controller
+                                new ProfiledPIDController(constAutoAlignController.rotationKP,
+                                                constAutoAlignController.rotationKI,
+                                                constAutoAlignController.rotationKD, // Rotation controller
                                                 new TrapezoidProfile.Constraints(
                                                                 constDrivetrain.maxSpeed * constAutoAlign.speedMod
-                                                                                * 2.0, // Higher max rotation speed
+                                                                                * constAutoAlignController.maxRotationSpeedMultiplier,
                                                                 constDrivetrain.maxSpeed * constAutoAlign.speedMod
-                                                                                * 1.5))); // Higher max rotation
-                                                                                          // acceleration
+                                                                                * constAutoAlignController.maxRotationAccelerationMultiplier)));
 
                 // Get current robot pose from vision odometry, fallback to drivetrain if no
                 // vision data
@@ -124,15 +139,19 @@ public class AutoAlignCommand extends Command {
                         System.out.println("No vision pose available, using drivetrain odometry");
                 }
 
+                // Select the appropriate goal offset based on alignment side
+                var goalOffset = (alignmentSide == AlignmentSide.LEFT) ? 
+                        constAutoAlign.goalOffsetLeft : constAutoAlign.goalOffsetRight;
+
                 // Apply the offset relative to the TAG pose to position robot facing the tag
                 // This goalPose is now FIXED and will not change during command execution
-                this.goalPose = targetPose.plus(constAutoAlign.goalOffset).toPose2d();
+                this.goalPose = targetPose.plus(goalOffset).toPose2d();
 
                 System.out.println("=== Auto-Align Debug ===");
                 System.out.println("Current robot pose: " + currentRobotPose);
                 System.out.println("Tag pose: " + targetPose.toPose2d());
                 System.out.println("Tag rotation (degrees): " + targetPose.getRotation().toRotation2d().getDegrees());
-                System.out.println("Goal offset: " + constAutoAlign.goalOffset);
+                System.out.println("Goal offset (" + alignmentSide + "): " + goalOffset);
                 System.out.println("FIXED goal pose (robot target): " + goalPose);
                 System.out.println("Goal rotation (degrees): " + goalPose.getRotation().getDegrees());
                 System.out.println("Distance to travel: "
@@ -163,8 +182,8 @@ public class AutoAlignCommand extends Command {
                 // Apply the speeds to the drivetrain using robot-centric control
                 drivetrain.setControl(applyRobotSpeeds.withSpeeds(autoAlignInputs));
 
-                // Optional: Log progress every 0.5 seconds
-                if (timer.get() % 0.5 < 0.02) {
+                // Optional: Log progress at regular intervals
+                if (timer.get() % constAutoAlignLogging.logInterval < constAutoAlignLogging.logTolerance) {
                         System.out.println("Auto-align progress: " +
                                         String.format("%.1f", timer.get()) + "s / " +
                                         String.format("%.1f", trajectory.getTotalTimeSeconds()) + "s, " +

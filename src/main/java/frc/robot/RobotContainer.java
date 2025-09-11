@@ -88,7 +88,7 @@ public class RobotContainer {
                                                 () -> -joystick.getLeftY(),
                                                 () -> -joystick.getLeftX(),
                                                 () -> -joystick.getRightX(),
-                                                joystick.rightBumper(), // Use rightBumper() directly as BooleanSupplier
+                                                () -> false, // Remove right bumper from drive command
                                                 maxSpeed,
                                                 maxAngularRate));
 
@@ -101,21 +101,47 @@ public class RobotContainer {
                                 () -> point.withModuleDirection(
                                                 new Rotation2d(-joystick.getLeftY(), -joystick.getLeftX()))));
 
-                // joystick.pov(0).whileTrue(
-                // drivetrain.applyRequest(() ->
-                // forwardStraight.withVelocityX(0.5).withVelocityY(0)));
-                // joystick.pov(180)
-                // .whileTrue(drivetrain.applyRequest(
-                // () -> forwardStraight.withVelocityX(-0.5).withVelocityY(0)));
+                // Left bumper for LEFT auto-align
+                joystick.leftBumper().onTrue(new InstantCommand(() -> {
+                        System.out.println("Left bumper pressed - starting LEFT auto-align");
 
-                // Run SysId routines when holding back/start and X/Y.
-                // Note that each routine should be run exactly once in a single log.
-                // joystick.back().and(joystick.y()).whileTrue(drivetrain.sysIdDynamic(Direction.kForward));
-                // joystick.back().and(joystick.x()).whileTrue(drivetrain.sysIdDynamic(Direction.kReverse));
-                // joystick.start().and(joystick.y()).whileTrue(drivetrain.sysIdQuasistatic(Direction.kForward));
-                // joystick.start().and(joystick.x()).whileTrue(drivetrain.sysIdQuasistatic(Direction.kReverse));
+                        // Get the best tag pose ONCE when button is pressed
+                        var bestTagPose = vision.getBestTagPose();
+                        System.out.println("Best tag pose selected: " + bestTagPose);
 
-                joystick.leftBumper().onTrue(drivetrain.runOnce(() -> drivetrain.seedFieldCentric()));
+                        if (bestTagPose != null) {
+                                System.out.println(
+                                                "Creating LEFT AutoAlignCommand with FIXED tag pose: " + bestTagPose);
+                                new AutoAlignCommand(drivetrain, vision, bestTagPose,
+                                                AutoAlignCommand.AlignmentSide.LEFT).schedule();
+                        } else {
+                                System.out.println("No valid AprilTag found for LEFT auto-alignment");
+                        }
+                }));
+
+                // Right bumper for RIGHT auto-align
+                joystick.rightBumper().onTrue(new InstantCommand(() -> {
+                        System.out.println("Right bumper pressed - starting RIGHT auto-align");
+
+                        // Get the best tag pose ONCE when button is pressed
+                        var bestTagPose = vision.getBestTagPose();
+                        System.out.println("Best tag pose selected: " + bestTagPose);
+
+                        if (bestTagPose != null) {
+                                System.out.println(
+                                                "Creating RIGHT AutoAlignCommand with FIXED tag pose: " + bestTagPose);
+                                new AutoAlignCommand(drivetrain, vision, bestTagPose,
+                                                AutoAlignCommand.AlignmentSide.RIGHT).schedule();
+                        } else {
+                                System.out.println("No valid AprilTag found for RIGHT auto-alignment");
+                        }
+                }));
+
+                // Y button for field-centric heading reset
+                joystick.y().onTrue(new InstantCommand(() -> {
+                        System.out.println("Y button pressed - resetting field-centric heading");
+                        drivetrain.seedFieldCentric();
+                }));
 
                 joystick.x().onTrue(new InstantCommand(() -> elevator.setHeight(constElevator.idle)));
 
@@ -123,23 +149,6 @@ public class RobotContainer {
                 joystick.pov(270).onTrue(new InstantCommand(() -> elevator.setHeight(constElevator.l2)));
                 joystick.pov(0).onTrue(new InstantCommand(() -> elevator.setHeight(constElevator.l3)));
                 joystick.pov(90).onTrue(new InstantCommand(() -> elevator.setHeight(constElevator.l4)));
-
-                // Auto-align to best AprilTag when Y button is pressed
-                joystick.y().onTrue(new InstantCommand(() -> {
-                        System.out.println("Y button pressed - starting auto-align");
-
-                        // Get the best tag pose ONCE when button is pressed
-                        var bestTagPose = vision.getBestTagPose();
-                        System.out.println("Best tag pose selected: " + bestTagPose);
-
-                        if (bestTagPose != null) {
-                                System.out.println("Creating AutoAlignCommand with FIXED tag pose: " + bestTagPose);
-                                // The command will store this pose and NOT change it during execution
-                                new AutoAlignCommand(drivetrain, vision, bestTagPose).schedule();
-                        } else {
-                                System.out.println("No valid AprilTag found for auto-alignment");
-                        }
-                }));
 
                 // Debug vision system with Back button
                 joystick.back().onTrue(new InstantCommand(() -> {
@@ -150,9 +159,6 @@ public class RobotContainer {
                         System.out.println("Best tag pose: " + bestTag);
                         System.out.println("Current drivetrain pose: " + drivetrain.getPose());
                 }));
-
-                // VISION - Remove the manual periodic call
-                // vision.periodic(); // Remove this line
 
                 drivetrain.registerTelemetry(logger::telemeterize);
         }
