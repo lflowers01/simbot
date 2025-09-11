@@ -79,7 +79,7 @@ public class Constants {
         public static final double maxZError = 0.3; // Meters
 
         // Tag filtering for auto-alignment
-        public static final double maxTagDistance = 9.0; // Maximum distance to consider tags (meters)
+        public static final double maxTagDistance = 5.0; // Maximum distance to consider tags (meters)
         public static final int[] blueTagIds = { 17, 18, 19, 20, 21, 22 };
         public static final int[] redTagIds = { 6, 7, 8, 9, 10, 11 };
 
@@ -186,5 +186,14 @@ public class Constants {
     public class constAutoAlignLogging {
         public static final double logInterval = 0.5; // Log progress every 0.5 seconds
         public static final double logTolerance = 0.02; // Tolerance for log timing
+    }
+
+    public class constAutoScore {
+        public static final double scoringDelaySeconds = 0.75; // Time to wait during scoring operation (fallback)
+        public static final double elevatorMovementTimeoutSeconds = 2.0; // Max time to wait for elevator movement
+        public static final double completionRadiusMeters = Units.inchesToMeters(24); // Distance from tag to trigger
+                                                                                      // scoring completion
+        // and
+        // return to idle
     }
 }

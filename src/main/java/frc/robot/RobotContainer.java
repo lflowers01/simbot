@@ -21,6 +21,8 @@ import frc.robot.Constants.constDrivetrain;
 import frc.robot.Constants.constElevator;
 import frc.robot.Constants.constVision;
 import frc.robot.commands.DriveCommand;
+import frc.robot.commands.AutoAlignCommand;
+import frc.robot.commands.AutoScoreCommand;
 import frc.robot.generated.TunerConstants;
 import frc.robot.subsystems.drive.Drive;
 import frc.robot.subsystems.elevator.Elevator;
@@ -29,7 +31,6 @@ import frc.robot.subsystems.elevator.ElevatorIOSim;
 import frc.robot.subsystems.vision.Vision;
 import frc.robot.subsystems.vision.VisionIOPhotonVision;
 import frc.robot.subsystems.vision.VisionIOPhotonVisionSim;
-import frc.robot.commands.AutoAlignCommand;
 
 public class RobotContainer {
 
@@ -54,6 +55,9 @@ public class RobotContainer {
         public final Drive drivetrain = TunerConstants.createDrivetrain();
         private final Elevator elevator;
         private final Vision vision;
+
+        // Queued scoring level state
+        private double queuedScoringLevel = constElevator.l1; // Default to L1
 
         public RobotContainer() {
                 if (RobotBase.isReal()) {
@@ -101,40 +105,24 @@ public class RobotContainer {
                                 () -> point.withModuleDirection(
                                                 new Rotation2d(-joystick.getLeftY(), -joystick.getLeftX()))));
 
-                // Left bumper for LEFT auto-align
+                // Left bumper for LEFT auto-align and score
                 joystick.leftBumper().onTrue(new InstantCommand(() -> {
-                        System.out.println("Left bumper pressed - starting LEFT auto-align");
+                        System.out.println("Left bumper pressed - starting LEFT auto-align and score sequence");
+                        System.out.println("Queued scoring level: " + queuedScoringLevel + "m");
 
-                        // Get the best tag pose ONCE when button is pressed
-                        var bestTagPose = vision.getBestTagPose();
-                        System.out.println("Best tag pose selected: " + bestTagPose);
-
-                        if (bestTagPose != null) {
-                                System.out.println(
-                                                "Creating LEFT AutoAlignCommand with FIXED tag pose: " + bestTagPose);
-                                new AutoAlignCommand(drivetrain, vision, bestTagPose,
-                                                AutoAlignCommand.AlignmentSide.LEFT).schedule();
-                        } else {
-                                System.out.println("No valid AprilTag found for LEFT auto-alignment");
-                        }
+                        // Create and schedule the complete scoring sequence
+                        new AutoScoreCommand(drivetrain, vision, elevator,
+                                        AutoAlignCommand.AlignmentSide.LEFT, queuedScoringLevel).schedule();
                 }));
 
-                // Right bumper for RIGHT auto-align
+                // Right bumper for RIGHT auto-align and score
                 joystick.rightBumper().onTrue(new InstantCommand(() -> {
-                        System.out.println("Right bumper pressed - starting RIGHT auto-align");
+                        System.out.println("Right bumper pressed - starting RIGHT auto-align and score sequence");
+                        System.out.println("Queued scoring level: " + queuedScoringLevel + "m");
 
-                        // Get the best tag pose ONCE when button is pressed
-                        var bestTagPose = vision.getBestTagPose();
-                        System.out.println("Best tag pose selected: " + bestTagPose);
-
-                        if (bestTagPose != null) {
-                                System.out.println(
-                                                "Creating RIGHT AutoAlignCommand with FIXED tag pose: " + bestTagPose);
-                                new AutoAlignCommand(drivetrain, vision, bestTagPose,
-                                                AutoAlignCommand.AlignmentSide.RIGHT).schedule();
-                        } else {
-                                System.out.println("No valid AprilTag found for RIGHT auto-alignment");
-                        }
+                        // Create and schedule the complete scoring sequence
+                        new AutoScoreCommand(drivetrain, vision, elevator,
+                                        AutoAlignCommand.AlignmentSide.RIGHT, queuedScoringLevel).schedule();
                 }));
 
                 // Y button for field-centric heading reset
@@ -143,12 +131,35 @@ public class RobotContainer {
                         drivetrain.seedFieldCentric();
                 }));
 
-                joystick.x().onTrue(new InstantCommand(() -> elevator.setHeight(constElevator.idle)));
+                // X button for manual elevator idle (emergency/manual control)
+                joystick.x().onTrue(new InstantCommand(() -> {
+                        System.out.println("X button pressed - manual elevator to idle");
+                        elevator.setHeight(constElevator.idle);
+                }));
 
-                joystick.pov(180).onTrue(new InstantCommand(() -> elevator.setHeight(constElevator.l1)));
-                joystick.pov(270).onTrue(new InstantCommand(() -> elevator.setHeight(constElevator.l2)));
-                joystick.pov(0).onTrue(new InstantCommand(() -> elevator.setHeight(constElevator.l3)));
-                joystick.pov(90).onTrue(new InstantCommand(() -> elevator.setHeight(constElevator.l4)));
+                // D-pad for queuing scoring levels
+                joystick.pov(180).onTrue(new InstantCommand(() -> {
+                        queuedScoringLevel = constElevator.l1;
+                        System.out.println(
+                                        "D-pad DOWN pressed - queued scoring level: L1 (" + queuedScoringLevel + "m)");
+                }));
+
+                joystick.pov(270).onTrue(new InstantCommand(() -> {
+                        queuedScoringLevel = constElevator.l2;
+                        System.out.println(
+                                        "D-pad LEFT pressed - queued scoring level: L2 (" + queuedScoringLevel + "m)");
+                }));
+
+                joystick.pov(0).onTrue(new InstantCommand(() -> {
+                        queuedScoringLevel = constElevator.l3;
+                        System.out.println("D-pad UP pressed - queued scoring level: L3 (" + queuedScoringLevel + "m)");
+                }));
+
+                joystick.pov(90).onTrue(new InstantCommand(() -> {
+                        queuedScoringLevel = constElevator.l4;
+                        System.out.println(
+                                        "D-pad RIGHT pressed - queued scoring level: L4 (" + queuedScoringLevel + "m)");
+                }));
 
                 // Debug vision system with Back button
                 joystick.back().onTrue(new InstantCommand(() -> {
@@ -158,6 +169,7 @@ public class RobotContainer {
                         System.out.println("Latest vision pose: " + latestPose);
                         System.out.println("Best tag pose: " + bestTag);
                         System.out.println("Current drivetrain pose: " + drivetrain.getPose());
+                        System.out.println("Queued scoring level: " + queuedScoringLevel + "m");
                 }));
 
                 drivetrain.registerTelemetry(logger::telemeterize);

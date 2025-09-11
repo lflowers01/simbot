@@ -140,8 +140,8 @@ public class AutoAlignCommand extends Command {
                 }
 
                 // Select the appropriate goal offset based on alignment side
-                var goalOffset = (alignmentSide == AlignmentSide.LEFT) ? 
-                        constAutoAlign.goalOffsetLeft : constAutoAlign.goalOffsetRight;
+                var goalOffset = (alignmentSide == AlignmentSide.LEFT) ? constAutoAlign.goalOffsetLeft
+                                : constAutoAlign.goalOffsetRight;
 
                 // Apply the offset relative to the TAG pose to position robot facing the tag
                 // This goalPose is now FIXED and will not change during command execution
