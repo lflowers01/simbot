@@ -28,6 +28,8 @@ import edu.wpi.first.wpilibj2.command.sysid.SysIdRoutine;
 import org.littletonrobotics.junction.Logger;
 
 import frc.robot.generated.TunerConstants.TunerSwerveDrivetrain;
+import frc.robot.Constants.constDrivetrain;
+import frc.robot.subsystems.vision.Vision;
 
 /**
  * Class that extends the Phoenix 6 SwerveDrivetrain class and implements
@@ -372,5 +374,71 @@ public class Drive extends TunerSwerveDrivetrain implements Subsystem {
      */
     public Pose2d getPose() {
         return getState().Pose;
+    }
+
+    /**
+     * Snaps the robot to face a target angle with optimal rotation direction and
+     * dead zone
+     * 
+     * @param targetAngle     The target angle to face (Rotation2d)
+     * @param currentPose     The current robot pose (should be vision pose when
+     *                        available)
+     * @param maxRotationRate Maximum rotation rate to use (radians per second)
+     * @param deadZoneDegrees Dead zone in degrees to prevent oscillation
+     * @return SwerveRequest to apply, or Idle if within dead zone
+     */
+    public SwerveRequest snapToAngle(Rotation2d targetAngle, Pose2d currentPose, double maxRotationRate,
+            double deadZoneDegrees) {
+        var currentRotation = currentPose.getRotation();
+        var rotationError = targetAngle.minus(currentRotation).getRadians();
+
+        // Normalize rotation error to [-π, π]
+        while (rotationError > Math.PI) {
+            rotationError -= 2 * Math.PI;
+        }
+        while (rotationError < -Math.PI) {
+            rotationError += 2 * Math.PI;
+        }
+
+        double rotationErrorDegrees = Math.toDegrees(Math.abs(rotationError));
+
+        // Debug output (every 10 calls to avoid spam)
+        if (Math.random() < 0.1) {
+            System.out.println("SnapToAngle: target=" + String.format("%.1f°", targetAngle.getDegrees()) +
+                    ", current=" + String.format("%.1f°", currentRotation.getDegrees()) +
+                    ", error=" + String.format("%.1f°", rotationErrorDegrees) +
+                    ", deadzone=" + String.format("%.1f°", deadZoneDegrees));
+        }
+
+        // Dead zone to prevent oscillation when close to target
+        if (rotationErrorDegrees < deadZoneDegrees) {
+            return new SwerveRequest.Idle();
+        }
+
+        // Calculate rotation command with reduced speed as we get closer to target
+        double speedMultiplier = 1.0;
+        if (rotationErrorDegrees < deadZoneDegrees * 3) {
+            // Slow down when within 3x the dead zone
+            speedMultiplier = 0.3;
+        }
+
+        double rotationCommand = Math.signum(rotationError) * maxRotationRate * speedMultiplier;
+
+        return new SwerveRequest.RobotCentric()
+                .withVelocityX(0)
+                .withVelocityY(0)
+                .withRotationalRate(rotationCommand);
+    }
+
+    /**
+     * Gets the best available robot pose, prioritizing vision over drivetrain
+     * odometry
+     * 
+     * @param vision The vision subsystem to get pose from
+     * @return The most accurate available robot pose
+     */
+    public Pose2d getBestAvailablePose(Vision vision) {
+        var visionPose = vision.getLatestVisionPose();
+        return visionPose != null ? visionPose : getPose();
     }
 }

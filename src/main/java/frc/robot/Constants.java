@@ -35,8 +35,8 @@ public class Constants {
     }
 
     public class constElevator {
-        public static int leadMotorId = 10;
-        public static int followMotorId = 11;
+        public static int leadMotorId = 22;
+        public static int followMotorId = 21;
 
         public static double kG = 0.0;
         public static double kS = 0.00;
@@ -83,6 +83,19 @@ public class Constants {
         public static final int[] blueTagIds = { 17, 18, 19, 20, 21, 22 };
         public static final int[] redTagIds = { 6, 7, 8, 9, 10, 11 };
 
+        public enum StationTag {
+            BLUE_LEFT(13),
+            BLUE_RIGHT(12),
+            RED_LEFT(1),
+            RED_RIGHT(2);
+
+            public final int id;
+
+            StationTag(int id) {
+                this.id = id;
+            }
+        }
+
         // Triangle detection parameters for auto-alignment
         public static final double detectionTriangleAngleDegrees = 120.0; // Angle of triangle detection zones for tag
                                                                           // selection
@@ -108,25 +121,22 @@ public class Constants {
         public static final String camera0Name = "camera_0";
         public static final String camera1Name = "camera_1";
 
-        // Robot to camera transforms
-        // Left camera transform
-        // pitch -20, yaw 45, roll 0
-        // x 310.920mm, y -293.896mm, z 247.375mm
+        // Robot to camera transforms - SIMPLIFIED for testing
+        // Left camera (camera_0): Front-left of robot
+        // Right camera (camera_1): Front-right of robot
+        // Using simple positions for testing - 12" forward, ±12" sideways, 9.3" up
         public static final Transform3d robotToCamera0 = new Transform3d(
-                new Translation3d(293.896 / 1000.0, -310.920 / 1000.0, 247.375 / 1000.0),
-                new Rotation3d(0, Math.toRadians(-20), Math.toRadians(45)));
+                new Translation3d(Units.inchesToMeters(12), Units.inchesToMeters(12), Units.inchesToMeters(9.3)),
+                new Rotation3d(0, Math.toRadians(-20), Math.toRadians(-45))); // Look forward-left
 
-        // Right camera transform
-        // pitch -20, yaw -45, roll 0
-        // x -310.920mm, y -293.896mm, z 247.375mm
         public static final Transform3d robotToCamera1 = new Transform3d(
-                new Translation3d(293.896 / 1000.0, 310.920 / 1000.0, 247.375 / 1000.0),
-                new Rotation3d(0, Math.toRadians(-20), Math.toRadians(-45)));
+                new Translation3d(Units.inchesToMeters(12), Units.inchesToMeters(-12), Units.inchesToMeters(9.3)),
+                new Rotation3d(0, Math.toRadians(-20), Math.toRadians(45))); // Look forward-right
 
         // Standard deviation multipliers for each camera
         public static final double[] cameraStdDevFactors = new double[] {
-                1.0, // Camera 0
-                1.0 // Camera 1
+                2.0, // Camera 0
+                2.0 // Camera 1
         };
 
         // Multipliers to apply for MegaTag 2 observations
@@ -135,9 +145,9 @@ public class Constants {
 
         // Camera simulation properties
         public static final int cameraFPS = 30;
-        public static final int cameraResolutionWidth = 640;
-        public static final int cameraResolutionHeight = 480;
-        public static final double cameraFOVDegrees = 80.0;
+        public static final int cameraResolutionWidth = 800;
+        public static final int cameraResolutionHeight = 600;
+        public static final double cameraFOVDegrees = 70.0;
     }
 
     public class constAutoAlign {
@@ -149,38 +159,44 @@ public class Constants {
         public static final Transform3d goalOffsetRight = new Transform3d(
                 new Translation3d(Units.inchesToMeters(18), Units.inchesToMeters(6.5), 0),
                 new Rotation3d(0, 0, Math.toRadians(180)));
-        public static final double speedMod = 1.0; // Full speed for aggressive movement
+        public static final Transform3d goalOffsetStation = new Transform3d(
+                new Translation3d(Units.inchesToMeters(18), Units.inchesToMeters(0), 0),
+                new Rotation3d(0, 0, 0));
+        public static final double speedMod = 0.4; // Increased for smoother movement (was 0.005)
+
+        // Maximum distance to allow alignment with any tag
+        public static final double maxAlignmentDistance = 5.0; // 5 meters maximum alignment distance
     }
 
     public class constAutoAlignTrajectory {
-        // Minimum distance thresholds
+        // Minimum distance threshold
         public static final double minTrajectoryDistance = 0.03; // 3cm minimum distance for trajectory generation
-        public static final double minMovementDistance = 0.05; // 5cm forward movement for close poses
+        public static final double minMovementDistance = 0.015; // 5cm forward movement for close poses
 
-        // Trajectory speed multipliers (relative to base speeds)
-        public static final double velocityMultiplier = 1.5; // 50% faster than base auto-align speed
-        public static final double accelerationMultiplier = 1.2; // 20% faster acceleration
-        public static final double slowTrajectorySpeed = 0.1; // Very slow speed for minimal movements
+        // SMOOTH trajectory speeds - much slower and more controlled
+        public static final double velocityMultiplier = 1; // Much slower (was 1.5)
+        public static final double accelerationMultiplier = 1.2; // Much gentler acceleration (was 1.2)
+        public static final double slowTrajectorySpeed = 0.3; // Very gentle for minimal movements
 
-        // Waypoint generation parameters
-        public static final double translationBias = 0.2; // 25% of distance for translation waypoint
-        public static final double rotationBias = 0.8; // 75% of rotation at waypoint for rotation-first movement
+        // Smoother waypoint generation - less aggressive movement
+        public static final double translationBias = 0.2; // More gradual translation (was 0.2)
+        public static final double rotationBias = 0.8; // Less aggressive rotation bias (was 0.8)
     }
 
     public class constAutoAlignController {
-        // Translation PID gains
-        public static final double translationKP = 5.0; // Higher P gain for precise following
-        public static final double translationKI = 0.05; // No integral term
-        public static final double translationKD = 0.5; // Damping term
+        // MUCH gentler PID gains for smooth movement
+        public static final double translationKP = 1.0; // Much lower P gain (was 5.0)
+        public static final double translationKI = 0.0; // No integral term to avoid oscillation
+        public static final double translationKD = 0.0; // Light damping (was 0.5)
 
-        // Rotation PID gains
-        public static final double rotationKP = 8.5; // Much higher P gain for rotation
-        public static final double rotationKI = 0.15; // No integral term
-        public static final double rotationKD = 0.8; // Higher damping for rotation
+        // Gentler rotation PID gains
+        public static final double rotationKP = 2.0; // Much lower P gain (was 8.5)
+        public static final double rotationKI = 0.0; // No integral term
+        public static final double rotationKD = 0.0; // Light damping (was 0.8)
 
-        // Rotation profile constraints multipliers
-        public static final double maxRotationSpeedMultiplier = 2.5; // Higher max rotation speed
-        public static final double maxRotationAccelerationMultiplier = 1.5; // Higher max rotation acceleration
+        // MUCH slower rotation profile constraints
+        public static final double maxRotationSpeedMultiplier = 2.0; // Much slower (was 2.5)
+        public static final double maxRotationAccelerationMultiplier = 1.0; // Much gentler (was 1.5)
     }
 
     public class constAutoAlignLogging {
@@ -193,7 +209,7 @@ public class Constants {
         public static final double elevatorMovementTimeoutSeconds = 2.0; // Max time to wait for elevator movement
         public static final double completionRadiusMeters = Units.inchesToMeters(24); // Distance from tag to trigger
                                                                                       // scoring completion
-        // and
-        // return to idle
+                                                                                      // and
+                                                                                      // return to idle
     }
 }

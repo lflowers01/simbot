@@ -10,6 +10,7 @@ import frc.robot.subsystems.elevator.Elevator;
 import frc.robot.subsystems.vision.Vision;
 import edu.wpi.first.math.geometry.Pose3d;
 
+// TODO: DONT GUESS WHEN NO TARGETS
 public class AutoScoreCommand extends Command {
     public enum ScoringPhase {
         AUTO_ALIGN_AND_ELEVATOR,
@@ -108,8 +109,12 @@ public class AutoScoreCommand extends Command {
             case SCORING_ACTIVE:
                 // Check distance from target tag - robot can be driven manually
                 if (targetTagPose != null) {
-                    // Get current robot position
-                    var currentPose = drivetrain.getPose();
+                    // Get current robot position - prioritize vision over drivetrain
+                    var currentPose = vision.getLatestVisionPose();
+                    if (currentPose == null) {
+                        currentPose = drivetrain.getPose();
+                    }
+
                     var tagPosition = targetTagPose.getTranslation().toTranslation2d();
                     var robotPosition = currentPose.getTranslation();
                     double distanceToTag = robotPosition.getDistance(tagPosition);
@@ -162,7 +167,10 @@ public class AutoScoreCommand extends Command {
 
             String distanceInfo = "";
             if (currentPhase == ScoringPhase.SCORING_ACTIVE && targetTagPose != null) {
-                var currentPose = drivetrain.getPose();
+                var currentPose = vision.getLatestVisionPose();
+                if (currentPose == null) {
+                    currentPose = drivetrain.getPose();
+                }
                 var tagPosition = targetTagPose.getTranslation().toTranslation2d();
                 double distanceToTag = currentPose.getTranslation().getDistance(tagPosition);
                 distanceInfo = " [dist to tag: " + String.format("%.2f", distanceToTag) + "m]";

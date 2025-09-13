@@ -22,6 +22,7 @@ public class DriveCommand extends Command {
     private final BooleanSupplier m_slowDrive;
     private final double m_maxSpeed;
     private final double m_maxAngularRate;
+    private final frc.robot.subsystems.vision.Vision m_vision;
 
     /**
      * Creates a new DriveCommand.
@@ -33,6 +34,7 @@ public class DriveCommand extends Command {
      * @param slowDrive      Slow drive mode boolean supplier
      * @param maxSpeed       Maximum translation speed
      * @param maxAngularRate Maximum angular rate
+     * @param vision         Vision subsystem for pose corrections
      */
     public DriveCommand(
             Drive driveSubsystem,
@@ -41,7 +43,8 @@ public class DriveCommand extends Command {
             DoubleSupplier rotation,
             BooleanSupplier slowDrive,
             double maxSpeed,
-            double maxAngularRate) {
+            double maxAngularRate,
+            frc.robot.subsystems.vision.Vision vision) {
 
         m_driveSubsystem = driveSubsystem;
         m_translation = translation;
@@ -50,6 +53,7 @@ public class DriveCommand extends Command {
         m_slowDrive = slowDrive;
         m_maxSpeed = maxSpeed;
         m_maxAngularRate = maxAngularRate;
+        m_vision = vision;
 
         addRequirements(driveSubsystem);
     }
@@ -124,7 +128,9 @@ public class DriveCommand extends Command {
             m_driveSubsystem.currentHeading = Optional.empty();
         } else {
             if (m_driveSubsystem.currentHeading.isEmpty()) {
-                m_driveSubsystem.currentHeading = Optional.of(m_driveSubsystem.getState().Pose.getRotation());
+                // Use vision pose when available for heading capture
+                var currentPose = m_driveSubsystem.getBestAvailablePose(m_vision);
+                m_driveSubsystem.currentHeading = Optional.of(currentPose.getRotation());
             }
 
             Optional<Alliance> alliance = DriverStation.getAlliance();

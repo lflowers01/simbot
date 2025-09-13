@@ -18,6 +18,7 @@ import edu.wpi.first.math.VecBuilder;
 import edu.wpi.first.math.geometry.Pose2d;
 import edu.wpi.first.math.geometry.Pose3d;
 import edu.wpi.first.math.geometry.Rotation2d;
+import edu.wpi.first.math.geometry.Rotation3d;
 import edu.wpi.first.math.numbers.N1;
 import edu.wpi.first.math.numbers.N3;
 import edu.wpi.first.wpilibj.Alert;
@@ -136,7 +137,14 @@ public class Vision extends SubsystemBase {
                         observation.ambiguity() <= constVision.maxAmbiguity &&
                         Math.abs(observation.pose().getZ()) <= constVision.maxZError) {
                     latestTimestamp = observation.timestamp();
-                    currentRobotPose = observation.pose().toPose2d();
+
+                    // Create floor-constrained pose from observation (ignore roll/pitch)
+                    var originalPose = observation.pose();
+                    currentRobotPose = new Pose2d(
+                            originalPose.getX(),
+                            originalPose.getY(),
+                            new Rotation2d(originalPose.getRotation().getZ()) // Only yaw
+                    );
                 }
             }
         }
@@ -199,9 +207,8 @@ public class Vision extends SubsystemBase {
                 closestTagId = tagId;
             }
 
-            // Calculate isosceles triangle parameters using LAYOUT POSE
-            var tagLayoutFacingDirection = tagLayoutPose.getRotation().toRotation2d(); // Tag faces in its +X direction
-                                                                                       // from LAYOUT
+            // Calculate isosceles triangle parameters using LAYOUT POSE (floor-constrained)
+            var tagLayoutFacingDirection = new Rotation2d(tagLayoutPose.getRotation().getZ()); // Only yaw from layout
 
             System.out.println("Tag " + tagId + ": Checking triangle intersection - " +
                     "pos=" + String.format("(%.2f, %.2f)", tagLayoutPosition.getX(), tagLayoutPosition.getY()) +
@@ -352,12 +359,33 @@ public class Vision extends SubsystemBase {
                         || observation.pose().getY() < 0.0
                         || observation.pose().getY() > constVision.aprilTagLayout.getFieldWidth();
 
-                // Add pose to log
-                robotPoses.add(observation.pose());
+                // Create floor-constrained pose (ignore roll AND pitch, only keep yaw)
+                var originalPose = observation.pose();
+                var originalRotation = originalPose.getRotation();
+
+                // Extract only the yaw (Z rotation) from the 3D rotation, ignore roll and pitch
+                double yawRadians = originalRotation.getZ();
+
+                var floorConstrainedPose = new Pose2d(
+                        originalPose.getX(),
+                        originalPose.getY(),
+                        new Rotation2d(yawRadians) // Only keep yaw rotation, ignore roll/pitch completely
+                );
+
+                // Convert floor-constrained 2D pose back to 3D for logging (Z=0, no roll/pitch)
+                var floorConstrainedPose3d = new Pose3d(
+                        floorConstrainedPose.getX(),
+                        floorConstrainedPose.getY(),
+                        0.0, // Z = 0 (on floor)
+                        new Rotation3d(0, 0, yawRadians) // Only yaw rotation, no roll/pitch
+                );
+
+                // Add pose to log - use floor-constrained pose for logging
+                robotPoses.add(floorConstrainedPose3d); // Log floor-constrained instead of original
                 if (rejectPose) {
-                    robotPosesRejected.add(observation.pose());
+                    robotPosesRejected.add(floorConstrainedPose3d);
                 } else {
-                    robotPosesAccepted.add(observation.pose());
+                    robotPosesAccepted.add(floorConstrainedPose3d);
                 }
 
                 // Skip if rejected
@@ -365,8 +393,10 @@ public class Vision extends SubsystemBase {
                     continue;
                 }
 
-                // Update latest accepted pose
-                latestAcceptedVisionPose = observation.pose().toPose2d();
+                // Update latest accepted pose (floor-constrained) - ONLY when we have a new
+                // accepted pose
+                // This prevents odometry flashing when no new poses are received
+                latestAcceptedVisionPose = floorConstrainedPose;
 
                 // Calculate standard deviations
                 double stdDevFactor = Math.pow(observation.averageTagDistance(), 2.0) / observation.tagCount();
@@ -381,9 +411,9 @@ public class Vision extends SubsystemBase {
                     angularStdDev *= constVision.cameraStdDevFactors[cameraIndex];
                 }
 
-                // Send vision observation
+                // Send vision observation (floor-constrained)
                 consumer.accept(
-                        observation.pose().toPose2d(),
+                        floorConstrainedPose,
                         observation.timestamp(),
                         VecBuilder.fill(linearStdDev, linearStdDev, angularStdDev));
             }

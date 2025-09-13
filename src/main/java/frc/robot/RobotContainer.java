@@ -20,6 +20,7 @@ import edu.wpi.first.wpilibj2.command.button.RobotModeTriggers;
 import frc.robot.Constants.constDrivetrain;
 import frc.robot.Constants.constElevator;
 import frc.robot.Constants.constVision;
+import frc.robot.Constants.constAutoAlign;
 import frc.robot.commands.DriveCommand;
 import frc.robot.commands.AutoAlignCommand;
 import frc.robot.commands.AutoScoreCommand;
@@ -94,7 +95,8 @@ public class RobotContainer {
                                                 () -> -joystick.getRightX(),
                                                 () -> false, // Remove right bumper from drive command
                                                 maxSpeed,
-                                                maxAngularRate));
+                                                maxAngularRate,
+                                                vision));
 
                 RobotModeTriggers.disabled().whileTrue(
                                 drivetrain.applyRequest(() -> idle).ignoringDisable(true));
@@ -125,6 +127,64 @@ public class RobotContainer {
                                         AutoAlignCommand.AlignmentSide.RIGHT, queuedScoringLevel).schedule();
                 }));
 
+                // Left trigger for snap rotation to left station (one-shot snap)
+                joystick.leftTrigger().onTrue(new InstantCommand(() -> {
+                        // Get target rotation from left station tag
+                        var alliance = DriverStation.getAlliance();
+                        constVision.StationTag stationTag;
+
+                        if (alliance.isPresent() && alliance.get() == Alliance.Blue) {
+                                stationTag = constVision.StationTag.BLUE_LEFT;
+                        } else {
+                                stationTag = constVision.StationTag.RED_LEFT;
+                        }
+
+                        var stationTagPoseOptional = constVision.aprilTagLayout.getTagPose(stationTag.id);
+                        if (stationTagPoseOptional.isPresent()) {
+                                var stationTagPose = stationTagPoseOptional.get();
+                                var targetRotation = stationTagPose.getRotation().toRotation2d();
+                                var currentPose = drivetrain.getBestAvailablePose(vision);
+
+                                System.out.println("LEFT TRIGGER: Snapping to " + targetRotation.getDegrees()
+                                                + "° from current " + currentPose.getRotation().getDegrees() + "°");
+
+                                // Create a command that snaps to the angle and then stops
+                                drivetrain.applyRequest(() -> drivetrain.snapToAngle(targetRotation,
+                                                drivetrain.getBestAvailablePose(vision), maxAngularRate * 0.8, 3.0))
+                                                .withTimeout(2.0) // Timeout after 2 seconds
+                                                .schedule();
+                        }
+                }));
+
+                // Right trigger for snap rotation to right station (one-shot snap)
+                joystick.rightTrigger().onTrue(new InstantCommand(() -> {
+                        // Get target rotation from right station tag
+                        var alliance = DriverStation.getAlliance();
+                        constVision.StationTag stationTag;
+
+                        if (alliance.isPresent() && alliance.get() == Alliance.Blue) {
+                                stationTag = constVision.StationTag.BLUE_RIGHT;
+                        } else {
+                                stationTag = constVision.StationTag.RED_RIGHT;
+                        }
+
+                        var stationTagPoseOptional = constVision.aprilTagLayout.getTagPose(stationTag.id);
+                        if (stationTagPoseOptional.isPresent()) {
+                                var stationTagPose = stationTagPoseOptional.get();
+                                var targetRotation = stationTagPose.getRotation().toRotation2d();
+                                var currentPose = drivetrain.getBestAvailablePose(vision);
+
+                                System.out.println("RIGHT TRIGGER: Snapping to " + targetRotation.getDegrees()
+                                                + "° from current " + currentPose.getRotation().getDegrees() + "°");
+
+                                // Create a command that snaps to the angle and then stops
+                                drivetrain.applyRequest(() -> drivetrain.snapToAngle(targetRotation,
+                                                drivetrain.getBestAvailablePose(vision), maxAngularRate * 0.8, 3.0))
+                                                .withTimeout(2.0) // Timeout after 2 seconds
+                                                .schedule();
+                        }
+                }));
+
                 // Y button for field-centric heading reset
                 joystick.y().onTrue(new InstantCommand(() -> {
                         System.out.println("Y button pressed - resetting field-centric heading");
@@ -143,18 +203,15 @@ public class RobotContainer {
                         System.out.println(
                                         "D-pad DOWN pressed - queued scoring level: L1 (" + queuedScoringLevel + "m)");
                 }));
-
                 joystick.pov(270).onTrue(new InstantCommand(() -> {
                         queuedScoringLevel = constElevator.l2;
                         System.out.println(
                                         "D-pad LEFT pressed - queued scoring level: L2 (" + queuedScoringLevel + "m)");
                 }));
-
                 joystick.pov(0).onTrue(new InstantCommand(() -> {
                         queuedScoringLevel = constElevator.l3;
                         System.out.println("D-pad UP pressed - queued scoring level: L3 (" + queuedScoringLevel + "m)");
                 }));
-
                 joystick.pov(90).onTrue(new InstantCommand(() -> {
                         queuedScoringLevel = constElevator.l4;
                         System.out.println(
