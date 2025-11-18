@@ -16,7 +16,7 @@ public class ElevatorIOSim extends ElevatorIO.TalonFXBase {
     private final MechanismLigament2d carriage;
 
     public ElevatorIOSim() {
-        super();
+        super(1);
 
         simState = leadMotor.getSimState();
 
@@ -39,7 +39,8 @@ public class ElevatorIOSim extends ElevatorIO.TalonFXBase {
                 constElevator.color));
         SmartDashboard.putData("ElevatorSim", mech2d);
 
-        simState.setRawRotorPosition(elevatorSim.getPositionMeters() * constElevator.rotationsPerMeter);
+        // Initialize sim rotor position/velocity using positionSign
+        simState.setRawRotorPosition(positionSign * elevatorSim.getPositionMeters() * constElevator.rotationsPerMeter);
         simState.setRotorVelocity(0);
         targetMeters = elevatorSim.getPositionMeters();
 
@@ -48,23 +49,36 @@ public class ElevatorIOSim extends ElevatorIO.TalonFXBase {
     @Override
     public void updateInputs(ElevatorIOInputs inputs) {
         simState.setSupplyVoltage(RobotController.getBatteryVoltage());
-        elevatorSim.setInputVoltage(simState.getMotorVoltage());
+        elevatorSim.setInput(simState.getMotorVoltage());
         elevatorSim.update(constElevator.simulationTick);
 
-        simState.setRawRotorPosition(elevatorSim.getPositionMeters() * constElevator.rotationsPerMeter);
-        simState.setRotorVelocity(elevatorSim.getVelocityMetersPerSecond() * constElevator.rotationsPerMeter);
+        // Apply positionSign when writing back to Talon sim state
+        simState.setRawRotorPosition(positionSign * elevatorSim.getPositionMeters() * constElevator.rotationsPerMeter);
+        simState.setRotorVelocity(
+                positionSign * elevatorSim.getVelocityMetersPerSecond() * constElevator.rotationsPerMeter);
 
         super.updateInputs(inputs);
 
-        carriage.setLength(elevatorSim.getPositionMeters());
+        carriage.setLength(elevatorSim.getPositionMeters() + 1);
         SmartDashboard.putNumber("Elevator Height (m)", elevatorSim.getPositionMeters());
         SmartDashboard.putNumber("Elevator Goal (m)", targetMeters);
     }
 
     @Override
     protected void updateInterfaceInputs(ElevatorIOInputs inputs) {
-        inputs.positionMeters = elevatorSim.getPositionMeters();
-        inputs.velocityMetersPerSec = elevatorSim.getVelocityMetersPerSecond();
+        // Mirror real IO: read simulated Talon encoder values, apply positionSign, and
+        // clamp.
+        double posMeters = positionSign * leadMotor.getPosition().getValueAsDouble() / constElevator.rotationsPerMeter;
+        double velMeters = positionSign * leadMotor.getVelocity().getValueAsDouble() / constElevator.rotationsPerMeter;
+
+        double clampedPos = Math.max(constElevator.minHeightMeters, Math.min(constElevator.maxHeightMeters, posMeters));
+        if (clampedPos != posMeters) {
+            System.out.println(String.format("Elevator (SIM): sensor position %.3f m out of bounds, clamped to %.3f m",
+                    posMeters, clampedPos));
+        }
+
+        inputs.positionMeters = clampedPos;
+        inputs.velocityMetersPerSec = velMeters;
     }
 
     @Override

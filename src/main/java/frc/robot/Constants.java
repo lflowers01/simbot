@@ -15,7 +15,7 @@ import edu.wpi.first.wpilibj.util.Color8Bit;
 public class Constants {
     public class constDrivetrain {
         public static final int joystickPort = 0;
-        public static final double maxAngularRate = 0.75;
+        public static final double maxAngularRate = 0.4;
         public static final double deadbandPercent = 0.1;
 
         // Advanced Drive Control Constants
@@ -26,8 +26,8 @@ public class Constants {
         public static final double inputCurve = 3.0; // Input exponent (1.0 = linear, 2.0 = squared, etc.)
 
         // Speed Control Constants
-        public static final double maxSpeed = 4.5; // Maximum robot speed in m/s
-        public static final double speedModifier = 1.0; // Speed modifier (0.0 to 1.0)
+        public static final double maxSpeed = 5.0; // Changed from 0 to 4.5 m/s
+        public static final double speedModifier = 1.0; // Changed from 0.0 to 1.0
 
         // Dimensions
         public static final double chassisWidth = Units.inchesToMeters(29.5);
@@ -40,37 +40,70 @@ public class Constants {
 
         public static double kG = 0.0;
         public static double kS = 0.00;
-        public static double kV = 0.05;
-        public static double kA = 0.000;
+        public static double kV = 0.1;
+        public static double kA = 0.0;
 
-        public static double kP = 3.37;
+        public static double kP = 6.00;
         public static double kI = 0.00;
-        public static double kD = 0.06;
+        public static double kD = 0.00;
 
-        public static double motionVelocity = 32.0; // m/s
-        public static double motionAcceleration = 48.0; // m/s²
+        public static double motionVelocity = 2.0; // m/s
+        public static double motionAcceleration = 4.0; // m/s²
 
         public static double expoKV = 0.04;
         public static double expoKA = 0.005;
 
-        public static double idle = 1;
-        public static double l1 = 1.325;
-        public static double l2 = 1.65;
-        public static double l3 = 1.975;
-        public static double l4 = 2.3;
+        public static double idle = Units.inchesToMeters(0.15);
+        public static double l1 = Units.inchesToMeters(8);
+        public static double l2 = Units.inchesToMeters(12);
+        public static double l3 = Units.inchesToMeters(24);
+        public static double l4 = Units.inchesToMeters(50.5);
 
         // Simulated parameters
         public static double simulationTick = 0.02; // Update every 20 ms
         public static double gearing = 6; // 8:48 reduction
         public static double carriageMass = Units.lbsToKilograms(6.081);
         public static double drumRadius = Units.inchesToMeters(1.538 / 2); // 1.538 inches diameter
-        public static double minHeightMeters = Units.inchesToMeters(39.25);
-        public static double maxHeightMeters = Units.inchesToMeters(93.75);
+        public static double minHeightMeters = Units.inchesToMeters(0);
+        public static double maxHeightMeters = Units.inchesToMeters(60);
         public static double verticalOffset = Units.inchesToMeters(1.75); // Ground to bottom of elevator
         public static double horizontalOffset = Units.inchesToMeters(29.5); // Center of robot to elevator
         public static Color8Bit color = new Color8Bit(255, 0, 0);
         public static double lineWidth = 5;
         public static double rotationsPerMeter = gearing / (2 * Math.PI * drumRadius);
+    }
+
+    public static final class constEndEffector {
+        // Motor configuration - Use pivot motor, not outtake motor
+        public static final int motorId = 32; // Pivot motor CAN ID
+        public static final int outtakeMotorId = 31; // Outtake motor CAN ID (for future use)
+
+        // Position limits (absolute motor position values from tuner software)
+        public static final double minPosition = -0.15; // Minimum motor position (SOFTWARE LIMIT)
+        public static final double maxPosition = 9.0; // Maximum motor position (SOFTWARE LIMIT)
+        public static final double idlePosition = -0.15; // Default/idle position
+
+        // Speed modifier for EndEffector movement
+        public static final double speedModifier = 0.4; // Full speed now
+
+        // PID gains for position control (tune these for your mechanism)
+        public static final double kP = 0.5; // Proportional gain
+        public static final double kI = 0.0; // Integral gain
+        public static final double kD = 0.0; // Derivative gain
+
+        // Coral intake/outtake speeds
+        public static final double intakeSpeed = -0.4; // Negative = intake coral (adjust sign as needed)
+        public static final double outtakeSpeed = 0.25; // Positive = outtake/score coral
+        public static final double stopSpeed = 0.0; // Stop motor
+
+        // Preset positions for common states (within limits)
+        public static final double stowPosition = 0.25; // Stowed position (same as idle)
+        public static final double intakePosition = 0.25; // Intake position (within -0.15 limit)
+
+        // Elevator-specific scoring positions - these are the ones that matter
+        public static final double l2Position = 0.0; // Position for L2 scoring
+        public static final double l3Position = 7.5; // Position for L3 scoring
+        public static final double l4Position = 7.875; // Position for L4 scoring
     }
 
     public class constVision {
@@ -160,9 +193,9 @@ public class Constants {
                 new Translation3d(Units.inchesToMeters(18), Units.inchesToMeters(6.5), 0),
                 new Rotation3d(0, 0, Math.toRadians(180)));
         public static final Transform3d goalOffsetStation = new Transform3d(
-                new Translation3d(Units.inchesToMeters(18), Units.inchesToMeters(0), 0),
+                new Translation3d(Units.inchesToMeters(18), Units.inchesToMeters(-6.5), 0),
                 new Rotation3d(0, 0, 0));
-        public static final double speedMod = 0.4; // Increased for smoother movement (was 0.005)
+        public static final double speedMod = 0.5; // Increased for smoother movement (was 0.005)
 
         // Maximum distance to allow alignment with any tag
         public static final double maxAlignmentDistance = 5.0; // 5 meters maximum alignment distance
@@ -185,12 +218,12 @@ public class Constants {
 
     public class constAutoAlignController {
         // MUCH gentler PID gains for smooth movement
-        public static final double translationKP = 1.0; // Much lower P gain (was 5.0)
+        public static final double translationKP = 2.0; // Much lower P gain (was 5.0)
         public static final double translationKI = 0.0; // No integral term to avoid oscillation
         public static final double translationKD = 0.0; // Light damping (was 0.5)
 
         // Gentler rotation PID gains
-        public static final double rotationKP = 2.0; // Much lower P gain (was 8.5)
+        public static final double rotationKP = 5.0; // Much lower P gain (was 8.5)
         public static final double rotationKI = 0.0; // No integral term
         public static final double rotationKD = 0.0; // Light damping (was 0.8)
 
@@ -207,9 +240,21 @@ public class Constants {
     public class constAutoScore {
         public static final double scoringDelaySeconds = 0.75; // Time to wait during scoring operation (fallback)
         public static final double elevatorMovementTimeoutSeconds = 2.0; // Max time to wait for elevator movement
-        public static final double completionRadiusMeters = Units.inchesToMeters(24); // Distance from tag to trigger
+        public static final double completionRadiusMeters = Units.inchesToMeters(42); // Distance from tag to
+                                                                                      // trigger
                                                                                       // scoring completion
                                                                                       // and
                                                                                       // return to idle
+    }
+
+    public class constTesting {
+        // In-place testing flags to disable robot movement for debugging
+        public static final boolean disableTranslation = false; // Set to true to disable X/Y movement
+        public static final boolean disableRotation = false; // Set to true to disable rotation
+        public static final boolean disableAutoAlign = false; // Set to true to disable auto-align movement
+        public static final boolean disableDriveCommand = false; // Set to true to disable manual driving
+
+        // Testing output flags
+        public static final boolean verboseLogging = false; // Set to true for extra debug output
     }
 }

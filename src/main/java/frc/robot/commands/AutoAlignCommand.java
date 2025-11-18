@@ -21,6 +21,7 @@ import frc.robot.Constants.constAutoAlignTrajectory;
 import frc.robot.Constants.constAutoAlignController;
 import frc.robot.Constants.constAutoAlignLogging;
 import frc.robot.Constants.constDrivetrain;
+import frc.robot.Constants.constTesting;
 import frc.robot.subsystems.drive.Drive;
 import frc.robot.subsystems.vision.Vision;
 import org.littletonrobotics.junction.Logger;
@@ -38,15 +39,24 @@ public class AutoAlignCommand extends Command {
         private final Pose2d goalPose;
         private final Timer timer = new Timer();
         private final SwerveRequest.ApplyRobotSpeeds applyRobotSpeeds = new SwerveRequest.ApplyRobotSpeeds();
-
-        // Move the static variable to class level for exponential smoothing
-        private ChassisSpeeds lastSpeeds = new ChassisSpeeds();
+        private boolean inRotationCorrectionPhase = false;
+        private static final double ROTATION_TOLERANCE = Math.toRadians(2.0); // 2 degrees tolerance
+        private static final double MAX_ROTATION_CORRECTION_TIME = 1.0; // 1 second timeout
 
         /**
          * Creates a smooth trajectory from current pose to target pose with gentle
          * curves
          */
         private Trajectory createLinearTrajectory(Pose2d currentPose, Pose2d targetPose) {
+                // Add null checks
+                if (currentPose == null || targetPose == null) {
+                        System.out.println("ERROR: Null pose provided to createLinearTrajectory");
+                        // Return a minimal stationary trajectory
+                        TrajectoryConfig config = new TrajectoryConfig(0.1, 0.1);
+                        return TrajectoryGenerator.generateTrajectory(
+                                        new Pose2d(), List.of(), new Pose2d(), config);
+                }
+
                 // Check if poses are too close together
                 double distance = currentPose.getTranslation().getDistance(targetPose.getTranslation());
 
@@ -109,12 +119,7 @@ public class AutoAlignCommand extends Command {
                 this.vision = vision;
                 addRequirements(drivetrain);
 
-                // Store the target pose - this will NOT change during command execution
-                System.out.println("=== Auto-Align Command Created ===");
-                System.out.println("Target tag pose locked in: " + targetPose);
-                System.out.println("Alignment side: " + alignmentSide);
-
-                // More aggressive PID controller gains for precise trajectory following
+                // Initialize controller first to avoid compilation error
                 this.controller = new HolonomicDriveController(
                                 new PIDController(constAutoAlignController.translationKP,
                                                 constAutoAlignController.translationKI,
@@ -130,6 +135,19 @@ public class AutoAlignCommand extends Command {
                                                                                 * constAutoAlignController.maxRotationSpeedMultiplier,
                                                                 constDrivetrain.maxSpeed * constAutoAlign.speedMod
                                                                                 * constAutoAlignController.maxRotationAccelerationMultiplier)));
+
+                // Check if the target tag is valid
+                if (targetPose == null) {
+                        System.out.println("ERROR: No target tag detected! Auto-align command will not execute.");
+                        this.goalPose = drivetrain.getPose(); // Stay in current position
+                        this.trajectory = createLinearTrajectory(goalPose, goalPose); // Dummy trajectory
+                        return;
+                }
+
+                // Store the target pose - this will NOT change during command execution
+                System.out.println("=== Auto-Align Command Created ===");
+                System.out.println("Target tag pose locked in: " + targetPose);
+                System.out.println("Alignment side: " + alignmentSide);
 
                 // Get current robot pose from vision odometry, fallback to drivetrain if no
                 // vision data
@@ -226,9 +244,6 @@ public class AutoAlignCommand extends Command {
 
         @Override
         public void execute() {
-                // Sample the trajectory at the current time
-                Trajectory.State goalTrajectory = trajectory.sample(timer.get());
-
                 // Get current robot pose - prioritize vision, fallback to drivetrain
                 Pose2d currentRobotPose = vision.getLatestVisionPose();
                 if (currentRobotPose == null) {
@@ -239,11 +254,28 @@ public class AutoAlignCommand extends Command {
                                         drivetrainPose.getRotation());
                 }
 
-                // Calculate chassis speeds with gentle controller
-                ChassisSpeeds autoAlignInputs = controller.calculate(
-                                currentRobotPose, goalTrajectory, goalPose.getRotation());
-                // least
-                // 2cm/s
+                if (!inRotationCorrectionPhase && timer.get() >= trajectory.getTotalTimeSeconds()) {
+                        // Transition to rotation correction phase
+                        inRotationCorrectionPhase = true;
+                        timer.reset();
+                }
+
+                ChassisSpeeds autoAlignInputs;
+
+                if (inRotationCorrectionPhase) {
+                        // Only apply rotation correction
+                        autoAlignInputs = new ChassisSpeeds(
+                                        0,
+                                        0,
+                                        controller.getThetaController().calculate(
+                                                        currentRobotPose.getRotation().getRadians(),
+                                                        goalPose.getRotation().getRadians()));
+                } else {
+                        // Normal trajectory following
+                        Trajectory.State goalTrajectory = trajectory.sample(timer.get());
+                        autoAlignInputs = controller.calculate(
+                                        currentRobotPose, goalTrajectory, goalPose.getRotation());
+                }
 
                 // Apply deadband to reduce jitter from small commands
                 final double TRANSLATION_DEADBAND = 0.005; // 5mm/s deadband
@@ -260,19 +292,42 @@ public class AutoAlignCommand extends Command {
                         autoAlignInputs.omegaRadiansPerSecond = 0.0;
                 }
 
-                // Update last speeds for next iteration
-                lastSpeeds = new ChassisSpeeds(autoAlignInputs.vxMetersPerSecond,
-                                autoAlignInputs.vyMetersPerSecond,
-                                autoAlignInputs.omegaRadiansPerSecond);
+                // Apply testing overrides to disable movement
+                if (constTesting.disableAutoAlign || constTesting.disableTranslation) {
+                        autoAlignInputs.vxMetersPerSecond = 0.0;
+                        autoAlignInputs.vyMetersPerSecond = 0.0;
+                        if (constTesting.verboseLogging) {
+                                System.out.println("TESTING: Translation disabled in auto-align");
+                        }
+                }
 
-                // Apply the smooth speeds to the drivetrain
+                if (constTesting.disableAutoAlign || constTesting.disableRotation) {
+                        autoAlignInputs.omegaRadiansPerSecond = 0.0;
+                        if (constTesting.verboseLogging) {
+                                System.out.println("TESTING: Rotation disabled in auto-align");
+                        }
+                }
+
+                // Apply the smooth speeds to the drivetrain (or zeros if disabled)
                 drivetrain.setControl(applyRobotSpeeds.withSpeeds(autoAlignInputs));
-
         }
 
         @Override
         public boolean isFinished() {
-                return timer.hasElapsed(trajectory.getTotalTimeSeconds());
+                if (!inRotationCorrectionPhase) {
+                        return false; // Wait for trajectory to complete first
+                }
+
+                // Check if rotation is within tolerance
+                Pose2d currentPose = vision.getLatestVisionPose();
+                if (currentPose == null) {
+                        currentPose = drivetrain.getPose();
+                }
+
+                double rotationError = Math.abs(goalPose.getRotation().minus(currentPose.getRotation()).getRadians());
+
+                // End if either within tolerance or timeout reached
+                return rotationError < ROTATION_TOLERANCE || timer.get() > MAX_ROTATION_CORRECTION_TIME;
         }
 
         @Override

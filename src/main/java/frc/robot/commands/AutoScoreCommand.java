@@ -67,12 +67,12 @@ public class AutoScoreCommand extends Command {
             System.out.println("Starting elevator movement to " + targetElevatorLevel + "m concurrently");
             elevator.setHeight(targetElevatorLevel);
         } else {
-            System.out.println("No valid AprilTag found - moving elevator only");
+            System.out.println(
+                    "No valid AprilTag found - elevator moving to target level, staying up for manual scoring");
             targetTagPose = null;
             elevator.setHeight(targetElevatorLevel);
-            // Skip directly to scoring active since there's no auto-align
-            currentPhase = ScoringPhase.SCORING_ACTIVE;
-            phaseTimer.restart();
+            // Stay in AUTO_ALIGN_AND_ELEVATOR phase to keep elevator up
+            // Command will remain active for manual control
         }
     }
 
@@ -97,12 +97,13 @@ public class AutoScoreCommand extends Command {
                         phaseTimer.restart();
                     }
                 } else {
-                    // No auto-align command, just wait for elevator timeout then proceed
-                    if (phaseTimer.hasElapsed(constAutoScore.elevatorMovementTimeoutSeconds)) {
-                        System.out.println("Elevator timeout reached - Phase: SCORING_ACTIVE");
-                        currentPhase = ScoringPhase.SCORING_ACTIVE;
-                        phaseTimer.restart();
-                    }
+                    // No auto-align command - elevator is up, waiting for manual completion
+                    // Keep elevator at target level and wait for manual trigger
+                    System.out.println("No tag found - elevator at " + targetElevatorLevel +
+                            "m, waiting for manual completion (press X to return to idle)");
+
+                    // Don't automatically progress phases - let user manually control
+                    // The command will stay active until manually ended or interrupted
                 }
                 break;
 
@@ -113,21 +114,24 @@ public class AutoScoreCommand extends Command {
                     var currentPose = vision.getLatestVisionPose();
                     if (currentPose == null) {
                         currentPose = drivetrain.getPose();
-                    }
+                    } // Add null safety check
+                    if (currentPose != null) {
+                        var tagPosition = targetTagPose.getTranslation().toTranslation2d();
+                        var robotPosition = currentPose.getTranslation();
+                        double distanceToTag = robotPosition.getDistance(tagPosition);
 
-                    var tagPosition = targetTagPose.getTranslation().toTranslation2d();
-                    var robotPosition = currentPose.getTranslation();
-                    double distanceToTag = robotPosition.getDistance(tagPosition);
+                        // Validate distance calculation
+                        if (Double.isFinite(distanceToTag) && distanceToTag > constAutoScore.completionRadiusMeters) {
+                            System.out.println("Robot moved away from tag (" + String.format("%.2f", distanceToTag) +
+                                    "m > " + constAutoScore.completionRadiusMeters + "m) - Phase: RETURN_TO_IDLE");
+                            currentPhase = ScoringPhase.RETURN_TO_IDLE;
+                            phaseTimer.restart();
 
-                    // Check if robot has moved far enough from the tag
-                    if (distanceToTag > constAutoScore.completionRadiusMeters) {
-                        System.out.println("Robot moved away from tag (" + String.format("%.2f", distanceToTag) +
-                                "m > " + constAutoScore.completionRadiusMeters + "m) - Phase: RETURN_TO_IDLE");
-                        currentPhase = ScoringPhase.RETURN_TO_IDLE;
-                        phaseTimer.restart();
-
-                        // Return elevator to idle
-                        elevator.setHeight(constElevator.idle);
+                            // Return elevator to idle
+                            elevator.setHeight(constElevator.idle);
+                        }
+                    } else {
+                        System.out.println("WARNING: No pose available for distance calculation");
                     }
                 } else {
                     // Fallback to time-based completion if no tag pose available
@@ -155,12 +159,15 @@ public class AutoScoreCommand extends Command {
                 break;
         }
 
-        // Log progress every 0.5 seconds
+        // Log progress every 0.5 seconds with safety checks
         if (phaseTimer.get() % 0.5 < 0.02) {
             String driveStatus;
             if (currentPhase == ScoringPhase.AUTO_ALIGN_AND_ELEVATOR) {
-                driveStatus = (autoAlignCommand != null) ? " (auto-driving + elevator moving)"
-                        : " (elevator moving only)";
+                if (autoAlignCommand != null) {
+                    driveStatus = " (auto-driving + elevator moving)";
+                } else {
+                    driveStatus = " (no tag found - elevator up, manual drive available)";
+                }
             } else {
                 driveStatus = " (manual drive available)";
             }
@@ -171,9 +178,13 @@ public class AutoScoreCommand extends Command {
                 if (currentPose == null) {
                     currentPose = drivetrain.getPose();
                 }
-                var tagPosition = targetTagPose.getTranslation().toTranslation2d();
-                double distanceToTag = currentPose.getTranslation().getDistance(tagPosition);
-                distanceInfo = " [dist to tag: " + String.format("%.2f", distanceToTag) + "m]";
+                if (currentPose != null) {
+                    var tagPosition = targetTagPose.getTranslation().toTranslation2d();
+                    double distanceToTag = currentPose.getTranslation().getDistance(tagPosition);
+                    if (Double.isFinite(distanceToTag)) {
+                        distanceInfo = " [dist to tag: " + String.format("%.2f", distanceToTag) + "m]";
+                    }
+                }
             }
 
             System.out.println("Scoring sequence - Phase: " + currentPhase +
@@ -183,6 +194,8 @@ public class AutoScoreCommand extends Command {
 
     @Override
     public boolean isFinished() {
+        // Only finish if we reach the FINISHED phase
+        // For no-tag scenarios, stay active in AUTO_ALIGN_AND_ELEVATOR phase
         return currentPhase == ScoringPhase.FINISHED;
     }
 

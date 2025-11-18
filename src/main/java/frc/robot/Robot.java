@@ -1,6 +1,6 @@
 // Copyright (c) FIRST and other WPILib contributors.
-// Open Source Software; you can modify and/or share it under the terms of
-// the WPILib BSD license file in the root directory of this project.
+// Open Source Software; you can modify and/or share it under the terms of the
+// WPILib BSD license file in the root directory of this project.
 
 package frc.robot;
 
@@ -21,13 +21,17 @@ public class Robot extends LoggedRobot {
     m_robotContainer = new RobotContainer();
 
     if (isReal()) {
-      Logger.addDataReceiver(new WPILOGWriter());
+      // Enable minimal logging for real robot - IO layers need this to work
+      System.out.println("Real robot mode - AdvantageKit logging enabled (minimal)");
       Logger.addDataReceiver(new NT4Publisher());
+      Logger.start();
     } else {
+      // Enable full logging in simulation
+      System.out.println("Simulation mode - AdvantageKit logging enabled (full)");
       Logger.addDataReceiver(new NT4Publisher());
+      Logger.start();
     }
 
-    Logger.start();
   }
 
   @Override
@@ -51,6 +55,12 @@ public class Robot extends LoggedRobot {
 
   @Override
   public void autonomousInit() {
+    m_autonomousCommand = m_robotContainer.getAutonomousCommand();
+
+    // schedule the autonomous command (example)
+    if (m_autonomousCommand != null) {
+      m_autonomousCommand.schedule();
+    }
   }
 
   @Override

@@ -12,6 +12,7 @@ import edu.wpi.first.wpilibj.Timer;
 import edu.wpi.first.wpilibj2.command.Command;
 
 import frc.robot.Constants.constDrivetrain;
+import frc.robot.Constants.constTesting;
 import frc.robot.subsystems.drive.Drive;
 
 public class DriveCommand extends Command {
@@ -107,6 +108,22 @@ public class DriveCommand extends Command {
         translationValue *= m_maxSpeed;
         strafeValue *= m_maxSpeed;
         rotationValue *= m_maxAngularRate;
+
+        // Apply testing overrides to disable movement
+        if (constTesting.disableDriveCommand || constTesting.disableTranslation) {
+            translationValue = 0.0;
+            strafeValue = 0.0;
+            if (constTesting.verboseLogging && (rawTranslation != 0 || rawStrafe != 0)) {
+                System.out.println("TESTING: Translation disabled in drive command");
+            }
+        }
+
+        if (constTesting.disableDriveCommand || constTesting.disableRotation) {
+            rotationValue = 0.0;
+            if (constTesting.verboseLogging && rawRotation != 0) {
+                System.out.println("TESTING: Rotation disabled in drive command");
+            }
+        }
 
         // Use raw rotation input for triggering to avoid false negatives from deadband
         boolean rotationTriggered = Math.abs(rawRotation) > constDrivetrain.deadband;

@@ -29,6 +29,7 @@ import org.littletonrobotics.junction.Logger;
 
 import frc.robot.generated.TunerConstants.TunerSwerveDrivetrain;
 import frc.robot.Constants.constDrivetrain;
+import frc.robot.Constants.constTesting;
 import frc.robot.subsystems.vision.Vision;
 
 /**
@@ -51,8 +52,8 @@ public class Drive extends TunerSwerveDrivetrain implements Subsystem {
     public double rotationLastTriggered = 0.0;
     public Optional<Rotation2d> currentHeading = Optional.empty();
 
-    /** Swerve request to apply during robot-centric path following */
-    private final SwerveRequest.ApplyRobotSpeeds m_pathApplyRobotSpeeds = new SwerveRequest.ApplyRobotSpeeds();
+    /** Swerve request to apply during robot-centric driving */
+    private final SwerveRequest.ApplyRobotSpeeds m_applyRobotSpeeds = new SwerveRequest.ApplyRobotSpeeds();
 
     /* Advanced Drive Control Requests */
     public final SwerveRequest.FieldCentric drive = new SwerveRequest.FieldCentric()
@@ -149,7 +150,6 @@ public class Drive extends TunerSwerveDrivetrain implements Subsystem {
         if (Utils.isSimulation()) {
             startSimThread();
         }
-        // configureAutoBuilder();
     }
 
     /**
@@ -175,7 +175,6 @@ public class Drive extends TunerSwerveDrivetrain implements Subsystem {
         if (Utils.isSimulation()) {
             startSimThread();
         }
-        // configureAutoBuilder();
     }
 
     /**
@@ -216,7 +215,6 @@ public class Drive extends TunerSwerveDrivetrain implements Subsystem {
         if (Utils.isSimulation()) {
             startSimThread();
         }
-        // configureAutoBuilder();
     }
 
     /**
@@ -254,7 +252,7 @@ public class Drive extends TunerSwerveDrivetrain implements Subsystem {
 
     @Override
     public void periodic() {
-        // Update inputs for logging
+        // Update inputs for logging - essential data only
         updateInputs(inputs);
         Logger.processInputs("Drive", inputs);
 
@@ -282,31 +280,23 @@ public class Drive extends TunerSwerveDrivetrain implements Subsystem {
 
     private void updateInputs(DriveIOInputsAutoLogged inputs) {
         var state = getState();
-        var modules = getModules();
 
-        // Robot pose (AdvantageScope format)
+        // Essential robot data only - reduce logging overhead
         inputs.pose = state.Pose;
-
-        // Robot velocities
         inputs.velocityX = state.Speeds.vxMetersPerSecond;
         inputs.velocityY = state.Speeds.vyMetersPerSecond;
         inputs.velocityOmegaRadPerSec = state.Speeds.omegaRadiansPerSecond;
 
-        // Module states (measured) - AdvantageScope format
+        // Essential module data - keep for diagnostics but reduce frequency if needed
         inputs.moduleStates = state.ModuleStates.clone();
-
-        // Module targets (setpoints) - AdvantageScope format
         inputs.moduleTargets = state.ModuleTargets.clone();
 
-        // Module positions - AdvantageScope format
-        inputs.modulePositions = state.ModulePositions.clone();
-
-        // Heading control state
+        // Heading control state - essential for drive commands
         inputs.hasCurrentHeading = currentHeading.isPresent();
         inputs.currentHeadingDegrees = currentHeading.map(heading -> heading.getDegrees()).orElse(0.0);
         inputs.rotationLastTriggered = rotationLastTriggered;
 
-        // Odometry frequency for diagnostics
+        // Essential diagnostics only
         inputs.odometryFrequency = 1.0 / state.OdometryPeriod;
     }
 
@@ -363,7 +353,8 @@ public class Drive extends TunerSwerveDrivetrain implements Subsystem {
             Pose2d visionRobotPoseMeters,
             double timestampSeconds,
             Matrix<N3, N1> visionMeasurementStdDevs) {
-        super.addVisionMeasurement(visionRobotPoseMeters, Utils.fpgaToCurrentTime(timestampSeconds),
+        super.addVisionMeasurement(visionRobotPoseMeters,
+                Utils.fpgaToCurrentTime(timestampSeconds),
                 visionMeasurementStdDevs);
     }
 
@@ -389,6 +380,20 @@ public class Drive extends TunerSwerveDrivetrain implements Subsystem {
      */
     public SwerveRequest snapToAngle(Rotation2d targetAngle, Pose2d currentPose, double maxRotationRate,
             double deadZoneDegrees) {
+        // Add null checks
+        if (targetAngle == null || currentPose == null) {
+            System.out.println("snapToAngle: null parameters provided");
+            return new SwerveRequest.Idle();
+        }
+
+        // Apply testing override
+        if (constTesting.disableRotation) {
+            if (constTesting.verboseLogging) {
+                System.out.println("TESTING: Snap to angle disabled");
+            }
+            return new SwerveRequest.Idle();
+        }
+
         var currentRotation = currentPose.getRotation();
         var rotationError = targetAngle.minus(currentRotation).getRadians();
 
@@ -402,8 +407,8 @@ public class Drive extends TunerSwerveDrivetrain implements Subsystem {
 
         double rotationErrorDegrees = Math.toDegrees(Math.abs(rotationError));
 
-        // Debug output (every 10 calls to avoid spam)
-        if (Math.random() < 0.1) {
+        // Debug output (every 50 calls to avoid spam) - reduced frequency
+        if (Math.random() < 0.02) {
             System.out.println("SnapToAngle: target=" + String.format("%.1f°", targetAngle.getDegrees()) +
                     ", current=" + String.format("%.1f°", currentRotation.getDegrees()) +
                     ", error=" + String.format("%.1f°", rotationErrorDegrees) +
@@ -438,6 +443,9 @@ public class Drive extends TunerSwerveDrivetrain implements Subsystem {
      * @return The most accurate available robot pose
      */
     public Pose2d getBestAvailablePose(Vision vision) {
+        if (vision == null) {
+            return getPose(); // Fallback to drivetrain pose
+        }
         var visionPose = vision.getLatestVisionPose();
         return visionPose != null ? visionPose : getPose();
     }
